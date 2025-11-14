@@ -138,7 +138,8 @@ def deserialize_img():
         db.close()
 
 
-deserialize_img()
+if __name__ == "__main__":
+    deserialize_img()
 
 
 # 清理XML数据函数

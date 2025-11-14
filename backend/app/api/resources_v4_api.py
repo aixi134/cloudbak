@@ -1,6 +1,8 @@
 import base64
+import io
 import os
 from io import BytesIO
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -14,9 +16,38 @@ from config.log_config import logger
 from wx.client_factory import ClientFactory
 from wx.common.filters.msg_filter import SingleMsgFilterObj
 
+from test.v4_image import decrypt_wechat_dat
+import base64
+import io
+from fastapi.responses import StreamingResponse
+import mimetypes
+
 router = APIRouter(
     prefix="/resources-v4"
 )
+
+def base64_preview(base64_str: str, file_ext: str):
+    """
+    将 base64 转换为在线预览文件（StreamingResponse）。
+    file_ext 例子: ".jpg" ".png" ".mp4" ".pdf"
+    """
+
+    # 去掉头部 data:image/jpeg;base64,
+    if "," in base64_str:
+        base64_str = base64_str.split(",", 1)[1]
+
+    raw_bytes = base64.b64decode(base64_str)
+
+    # 自动 MIME
+    mime_type, _ = mimetypes.guess_type("file" + file_ext)
+    if mime_type is None:
+        mime_type = "application/octet-stream"
+
+    # 内存流
+    stream = io.BytesIO(raw_bytes)
+
+    return StreamingResponse(stream, media_type=mime_type)
+
 
 
 @router.get("/relative-resource")
@@ -28,9 +59,12 @@ async def relative_resource(
     if client is None:
         logger.info(f"client {session_id} is not exists")
         raise HTTPException(status_code=404, detail="File not found")
-    base_dir = client.get_session_dir()
-    relative_path = relative_path.replace("\\", '/')
-    file_path = os.path.join(base_dir, relative_path)
+    # base_dir = client.get_session_dir()
+    # base_dir = "D:/wechat/xwechat_files/wxid_7jo9da638dml22_2d5d"
+    # relative_path = relative_path.replace("\\", '/')
+    # file_path = os.path.join(base_dir, relative_path)
+    base_dir = Path(r"D:\wechat\xwechat_files\wxid_7jo9da638dml22_2d5d")
+    file_path = base_dir / relative_path.strip("\\/")
     logger.info(f"file_path = {file_path}")
     # 确保 file_path 是 base_dir 的子路径
     abs_file_path = os.path.abspath(file_path)
@@ -39,25 +73,14 @@ async def relative_resource(
         raise HTTPException(status_code=403, detail="Invalid path")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
-    if resource_type == ResourceType.IMAGE:
-        jpg_path = file_path.replace(".dat", ".jpg")
-        if os.path.exists(jpg_path):
-            return FileResponse(jpg_path)
-        png_path = file_path.replace(".dat", ".png")
-        if os.path.exists(png_path):
-            return FileResponse(png_path)
-        gif_path = file_path.replace(".dat", ".gif")
-        if os.path.exists(gif_path):
-            return FileResponse(gif_path)
-        decoded_path = decrypt_file(file_path)
-        if decoded_path:
-            return FileResponse(decoded_path)
-    elif resource_type == ResourceType.FILE:
-        return FileResponse(file_path)
-    elif resource_type == ResourceType.VIDEO:
-        return FileResponse(file_path, media_type="video/mp4")
-    else:
-        raise HTTPException(status_code=404, detail="File not found")
+
+
+    b64 = decrypt_wechat_dat(file_path)
+
+
+    return b64
+
+
 
 
 @router.get("/media")

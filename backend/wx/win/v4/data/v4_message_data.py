@@ -1,9 +1,13 @@
 import array
 
+import os
+
 from sqlalchemy import inspect, select, func, literal_column
 
 from app.enum.msg_enum import FilterMode
 from config.log_config import logger
+import xmltodict
+
 from wx.common.filters.msg_filter import MsgFilterObj, SingleMsgFilterObj
 from wx.common.output.message import MsgSearchOut, Msg, WindowsV4Properties
 from wx.interface.wx_interface import MessageManager, ClientInterface
@@ -12,6 +16,12 @@ from wx.win.v4.models.message_model import DynamicModel, Name2Id
 import zstandard as zstd
 
 from wx.win.v4.utils.zstandard_utils import ZstandardUtils
+from wx.win.v4.wechatmsg_utils import (
+    parse_image_filename,
+    build_image_path_candidates,
+    build_thumb_path,
+    pick_existing_path,
+)
 
 
 class MessageManagerWindowsV4(MessageManager):
@@ -22,6 +32,7 @@ class MessageManagerWindowsV4(MessageManager):
         # username 映射的 db 库
         self.user_db_mapping = {}
         self.message_db_name_array = []
+        self.resource_manager = client.get_resource_manager()
 
     def clear(self):
         self.user_db_mapping.clear()
@@ -145,6 +156,7 @@ class MessageManagerWindowsV4(MessageManager):
                     msg.message_content_data = ZstandardUtils.convert_zstandard(m.message_content)
                     msg.source_data = ZstandardUtils.convert_zstandard(m.source)
                     msg.compress_content_data = ZstandardUtils.convert_zstandard(m.compress_content)
+                    self._append_media_info(filter_obj.username, msg, m.packed_info_data, msg.message_content_data)
                     # msg.packed_info_data_data = convert_zstandard(m.packed_info_data)
                     # msg.packed_info_data_data = m.packed_info_data
                     msgs.append(Msg(windows_v4_properties=msg))
@@ -177,3 +189,47 @@ class MessageManagerWindowsV4(MessageManager):
         with open('d:/packed_info_data', 'wb') as f:
             f.write(msg.packed_info_data)
         return None
+
+    def _append_media_info(self, talker_username, msg: WindowsV4Properties, packed_bytes: bytes, content_xml: str):
+        """
+        复用 WeChatMsg 的图片解析思路，补充图片类型的相对路径，便于前端直接显示。
+        """
+        if msg.local_type != 3:
+            return
+
+        file_name = parse_image_filename(packed_bytes)
+        candidates = build_image_path_candidates(talker_username, msg.create_time or 0, file_name)
+        if not candidates:
+            return
+
+        wx_dir = self.client.get_wx_dir()
+        session_rel = self._wrap_session_relative(pick_existing_path(wx_dir, candidates))
+        thumb_candidate = build_thumb_path(talker_username, msg.create_time or 0, file_name)
+        thumb_rel = None
+        if thumb_candidate:
+            thumb_rel = self._wrap_session_relative(
+                pick_existing_path(wx_dir, [thumb_candidate])
+            )
+
+        xml_md5 = None
+        try:
+            if content_xml:
+                xml_dict = xmltodict.parse(content_xml)
+                xml_md5 = xml_dict.get("msg", {}).get("img", {}).get("@md5")
+        except Exception as exc:
+            logger.debug(f"parse image xml failed: {exc}")
+
+        if session_rel:
+            msg.media = {
+                "type": "image",
+                "source": session_rel,
+                "thumb": thumb_rel or session_rel,
+                "file_name": file_name,
+                "md5": xml_md5,
+            }
+
+    def _wrap_session_relative(self, rel_path_from_wx):
+        if not rel_path_from_wx:
+            return None
+        relative = os.path.join(self.client.get_sys_session().wx_id, rel_path_from_wx)
+        return relative.replace("\\", "/")

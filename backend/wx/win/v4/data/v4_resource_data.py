@@ -1,4 +1,7 @@
+import os
 import os.path
+import re
+import sqlite3
 
 from datetime import datetime
 from sqlalchemy import select, func
@@ -8,6 +11,7 @@ from wx.interface.wx_interface import ResourceManager, ClientInterface
 from wx.win.v4.enums.v4_enums import V4DBEnum
 from wx.win.v4.models.hardlink import Dir2IdModel, Dir2IdModel, VideoHardlinkInfoModelV3, VideoHardlinkInfoModelV4, ImageHardlinkInfoModelV3, ImageHardlinkInfoModelV4
 from wx.win.v4.models.head_image import HeadImageModel
+from app.services.decode_wx_media import decode_media
 
 
 class WindowsV4ResourceManager(ResourceManager):
@@ -19,10 +23,24 @@ class WindowsV4ResourceManager(ResourceManager):
         pass
 
     def get_decode_media_path(self) -> str:
-        pass
+        decode_dir = os.path.join(self.client.get_session_dir(), V4DBEnum.DECODED_MEDIA_PATH)
+        if not os.path.exists(decode_dir):
+            os.makedirs(decode_dir, exist_ok=True)
+        return decode_dir
 
     def get_media_path(self, username: str, win_v3_msg_svr_id: str) -> str | None:
-        pass
+        try:
+            svr_id = int(win_v3_msg_svr_id)
+        except (TypeError, ValueError):
+            return None
+        media_dir = self.get_decode_media_path()
+        target_path = os.path.join(media_dir, f"{svr_id}.mp3")
+        if os.path.exists(target_path):
+            return target_path
+        voice_data = self._query_voice_data(svr_id)
+        if voice_data is None:
+            return None
+        return decode_media(media_dir, str(svr_id), voice_data)
 
     def get_wx_owner_img(self) -> str:
         wx_id = self.client.get_sys_session().wx_id
@@ -162,3 +180,28 @@ class WindowsV4ResourceManager(ResourceManager):
 
     def get_member_head(self, username: str) -> bytearray:
         pass
+
+    def _media_db_paths(self):
+        message_dir = os.path.join(self.client.get_wx_dir(), V4DBEnum.DB_BASE_PATH, V4DBEnum.MESSAGE_DB_FOLDER)
+        if not os.path.exists(message_dir):
+            return []
+        pattern = re.compile(r'^decoded_media_\d+\.db$')
+        dbs = []
+        for name in os.listdir(message_dir):
+            if pattern.match(name):
+                dbs.append(os.path.join(message_dir, name))
+        dbs.sort()
+        return dbs
+
+    def _query_voice_data(self, svr_id: int):
+        for db_path in self._media_db_paths():
+            try:
+                with sqlite3.connect(db_path) as conn:
+                    conn.row_factory = sqlite3.Row
+                    cur = conn.execute("SELECT voice_data FROM VoiceInfo WHERE svr_id = ? LIMIT 1", (svr_id,))
+                    row = cur.fetchone()
+                    if row and row["voice_data"]:
+                        return row["voice_data"]
+            except Exception as exc:
+                logger.warning(f"read voice data failed for {db_path}: {exc}")
+        return None

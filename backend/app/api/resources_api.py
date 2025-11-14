@@ -28,7 +28,8 @@ async def relative_resource(
     if client is None:
         logger.info(f"client {session_id} is not exists")
         raise HTTPException(status_code=404, detail="File not found")
-    base_dir = client.get_session_dir()
+    # base_dir = client.get_session_dir()
+    base_dir = "C:/Users/13448/xwechat_files/wxid_7jo9da638dml22_2d5d"
     relative_path = relative_path.replace("\\", '/')
     file_path = os.path.join(base_dir, relative_path)
     logger.info(f"file_path = {file_path}")
