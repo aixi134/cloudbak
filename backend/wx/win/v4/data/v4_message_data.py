@@ -1,4 +1,6 @@
 import array
+import datetime
+import hashlib
 
 import os
 
@@ -23,6 +25,9 @@ from wx.win.v4.wechatmsg_utils import (
     pick_existing_path,
 )
 
+image_root_path = "msg\\attach\\"
+video_root_path = "msg\\video\\"
+file_root_path = "msg\\file\\"
 
 class MessageManagerWindowsV4(MessageManager):
 
@@ -101,6 +106,34 @@ class MessageManagerWindowsV4(MessageManager):
         logger.info(f"最终排序 {final_array}")
         return final_array
 
+    def to_local_str(self, create_time):
+        dt = datetime.datetime.fromtimestamp(create_time)  # 本地时间
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    def get_image_by_time(self, message: WindowsV4Properties, talker_username):
+        """
+        @param message:
+        @param talker_username: 聊天对象的wxid
+        @return:
+        """
+        dir1 = hashlib.md5(talker_username.encode('utf-8')).hexdigest()
+        create_time = message.create_time
+        str_time = self.to_local_str(create_time)
+        dir2 = str_time[:7]  # 2024-12
+        dir0 = "Img"
+        local_id = message.local_id
+        create_time = message.sort_seq
+        data_image = f'{message.file_name}_W.dat' if message.file_name else f'{local_id}_{create_time}_W.dat'
+        path1 = os.path.join(image_root_path, dir1, dir2, dir0, data_image)
+        if os.path.exists(os.path.join('Me().wx_dir', path1)):
+            return path1
+        else:
+            data_image = f'{message.file_name}_h.dat' if message.file_name else f'{local_id}_{create_time}_h.dat'
+            path1 = os.path.join(image_root_path, dir1, dir2, dir0, data_image)
+            if os.path.exists(os.path.join('Me().wx_dir', path1)):
+                return path1
+            data_image = f'{message.file_name}.dat' if message.file_name else f'{local_id}_{create_time}.dat'
+            path1 = os.path.join(image_root_path, dir1, dir2, dir0, data_image)
+            return path1
     def messages_filter_page(self, filter_obj: MsgFilterObj) -> MsgSearchOut:
         # 获取动态表
         message_model = DynamicModel.get_dynamic_message_model(filter_obj.username)
@@ -159,6 +192,7 @@ class MessageManagerWindowsV4(MessageManager):
                     self._append_media_info(filter_obj.username, msg, m.packed_info_data, msg.message_content_data)
                     # msg.packed_info_data_data = convert_zstandard(m.packed_info_data)
                     # msg.packed_info_data_data = m.packed_info_data
+                    # self.get_image_by_time(msg, msg.sender)
                     msgs.append(Msg(windows_v4_properties=msg))
 
                 # 判断查询结果数量
@@ -182,12 +216,37 @@ class MessageManagerWindowsV4(MessageManager):
         table_name = message_model.__tablename__
         logger.info(table_name)
 
-        sm = self.get_message_session_maker_by_db_name(filter_obj.db_name)
-        with sm() as db:
-            msg = db.query(message_model).filter(message_model.local_id.is_(filter_obj.local_id)).one()
-            logger.info(f"msg is : {msg}")
+        # 如果未显式传入 db_name，尝试基于 server_id 先定位所在库
+        target_db = filter_obj.db_name
+        target_msg = None
+        server_id = filter_obj.server_sequence or filter_obj.v3_msg_svr_id
+
+        db_arrays = self.get_table_name_db_list(filter_obj.username, table_name)
+        for db_name in db_arrays:
+            if target_db and db_name != target_db:
+                continue
+            sm = self.get_message_session_maker_by_db_name(db_name)
+            with sm() as db:
+                query = db.query(message_model)
+                if filter_obj.local_id is not None:
+                    query = query.filter(message_model.local_id == filter_obj.local_id)
+                elif server_id is not None:
+                    query = query.filter(message_model.server_id == server_id)
+                else:
+                    continue
+                msg = query.first()
+                if msg:
+                    logger.info(f"msg is : {msg}")
+                    target_db = db_name
+                    target_msg = msg
+                    break
+
+        if target_msg is None:
+            logger.info("未找到匹配消息，无法写出 packed_info_data")
+            return None
+
         with open('d:/packed_info_data', 'wb') as f:
-            f.write(msg.packed_info_data)
+            f.write(target_msg.packed_info_data)
         return None
 
     def _append_media_info(self, talker_username, msg: WindowsV4Properties, packed_bytes: bytes, content_xml: str):

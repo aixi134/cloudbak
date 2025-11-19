@@ -63,7 +63,7 @@ const formatTimestamp = (timestamp) => {
     <div class="info-base">
       <div class="info-head">
         <img :src="store.getters.getCurrentSession.smallHeadImgUrl" alt="" v-if="store.getters.getClientVersion === 'win.v3'"/>
-        <img :src="`/api/resources/relative-resource?relative_path=${store.getters.getCurrentSession.smallHeadImgUrl}&session_id=${store.getters.getCurrentSessionId}`" alt="" v-else/>
+        <img :src="`/api/resources-v4/relative-resource?relative_path=${store.getters.getCurrentSession.smallHeadImgUrl}&session_id=${store.getters.getCurrentSessionId}`" alt="" v-else/>
 <!--        <img :src="getContactHeadById(store.getters.getCurrentSession.username)" alt=""/>-->
       </div>
       <div class="info-wx">

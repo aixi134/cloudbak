@@ -33,6 +33,10 @@ const props = defineProps({
   isChatRoom: {
     type: Boolean,
     default: false
+  },
+  dialogMode: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -118,7 +122,7 @@ const getImageUrl = (url) => {
 </script>
 
 <template>
-  <div class="chat" :class="{'right': props.msg.IsSender === 1, 'left': props.msg.IsSender === 0}">
+  <div class="chat" :class="{'right': props.dialogMode && props.msg.IsSender === 1, 'left': props.dialogMode && props.msg.IsSender === 0}">
     <div class="chat-header">
       <img :src="getContactHeadById(props.msg.sender)" @error="setDefaultImage" alt="" class="exclude"/>
     </div>
@@ -133,8 +137,8 @@ const getImageUrl = (url) => {
       <!-- 图片消息 -->
       <div v-else-if="props.msg.Type === 3" class="chat-img">
         <img
-            :src="'/api/resources/relative-resource?relative_path=' + props.msg.thumb + '&session_id=' + store.getters.getCurrentSessionId"
-            :data-original="props.msg.source ? '/api/resources/relative-resource?relative_path=' + props.msg.source + '&session_id=' + store.getters.getCurrentSessionId : cleanedImage"
+            :src="'/api/resources-v4/relative-resource?relative_path=' + props.msg.thumb + '&session_id=' + store.getters.getCurrentSessionId"
+            :data-original="props.msg.source ? '/api/resources-v4/relative-resource?relative_path=' + props.msg.source + '&session_id=' + store.getters.getCurrentSessionId : cleanedImage"
             alt=""/>
       </div>
       <!-- 语音消息 -->

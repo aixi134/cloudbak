@@ -86,7 +86,8 @@ class WindowsV4Decryptor(Decryptor):
         logger.info(f"db_base_dir: {db_base_dir}")
         sys_session = self.client.get_sys_session()
         # 遍历
-        for dirpath, dirnames, filenames in os.walk(db_base_dir):
+        files = os.walk(db_base_dir)
+        for dirpath, dirnames, filenames in files:
             for filename in filenames:
                 for pattern in compiled_patterns:
                     if pattern.match(filename):

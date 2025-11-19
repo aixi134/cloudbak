@@ -1,0 +1,6 @@
+*/.idea/
+/backend/data/sessions/1/
+*.log
+/WeChatMsg/example/wxid_7jo9da638dml22_bk/*
+/.idea/*
+/WeChatMsg/example/wxid_7jo9da638dml22_bk/db_storage/message/*

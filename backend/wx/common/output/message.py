@@ -1,4 +1,4 @@
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 
 from pydantic import BaseModel
 
@@ -55,6 +55,7 @@ class WindowsV4Properties(BaseModel):
     WCDB_CT_message_content: Optional[int] = None
     WCDB_CT_source: Optional[int] = None
     sender: Optional[str] = None
+    media: Optional[Dict[str, Any]] = None
 
 
 class Msg(BaseModel):

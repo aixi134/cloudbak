@@ -22,7 +22,7 @@ import sqlite3
 import binascii
 
 
-hardlink_image_path = 'D:\\workspace\\sessions\\8\\wxid_b125nd5rc59r12\\Msg\\decoded_HardLinkImage.db'
+hardlink_image_path = 'D:\\py-work\cloudbak\\backend\\data\\sessions\\1\\wxid_7jo9da638dml22\\db_storage\\hardlink\\decoded_hardlink.db'
 
 conn = sqlite3.connect(hardlink_image_path)
 c = conn.cursor()

@@ -11,11 +11,27 @@ import {msgBySvrId, singleMsg} from "@/api/msg.js"
 import {toBase64} from "js-base64";
 
 import {useStore} from "vuex";
-import {reactive} from "vue";
+import {computed, reactive} from "vue";
 import {getContactById, getContactName} from "../../utils/contact.js";
 import MsgTextWithEmoji from "../MsgTextWithEmoji.vue";
 
 const store = useStore();
+const emit = defineEmits(['goto-msg']);
+const QUOTE_TYPE = 244813135921;
+const RED_ENVELOPE_TYPE = 8594229559345;
+const PAT_TYPE = 266287972401;
+const ANIMATED_EMOJI_TYPE = 47;
+const APP_MESSAGE_TYPES = new Set([
+  17179869233,
+  21474836529,
+  12884901937,
+  4294967345,
+  292057776177,
+  326417514545,
+  141733920817,
+  154618822705,
+  103079215153
+]);
 
 const props = defineProps({
   roomId: {
@@ -31,10 +47,21 @@ const props = defineProps({
   isChatRoom: {
     type: Boolean,
     default: false
+  },
+  dialogMode: {
+    type: Boolean,
+    default: false
   }
 });
 
 const chatMapBySvrId = reactive({});
+const referTypeText = {
+  '1': '[文本]',
+  '3': '[图片]',
+  '34': '[语音]',
+  '43': '[视频]',
+  '49': '[文件]'
+};
 
 /**
  * 设置默认图片
@@ -106,12 +133,12 @@ if (props.msg.Type === 49 && props.msg.SubType === 19) {
 
 // 图片代理判断
 const getImageUrl = (url) => {
-  if (url) {
+  if (url && typeof url === 'string') {
     if (url.startsWith("/")) {
       return url;
     }
     if (store.getters.isPictureProxy) {
-      return `/api/resources/image-proxy?encoded_url=${toBase64(url)}`;
+      return `/api/resources-v4/image-proxy?encoded_url=${toBase64(url)}`;
     } else {
       return url;
     }
@@ -124,10 +151,96 @@ parseMsg(props.msg)
 
 const isSender = props.msg.sender === store.getters.getCurrentWxId;
 
+const buildRelativeResourceUrl = (relativePath, resourceType = 'image') => {
+  if (!relativePath) {
+    return undefined;
+  }
+  const sessionId = store.getters.getCurrentSessionId;
+  let url = `./api/resources-v4/relative-resource?relative_path=${encodeURIComponent(relativePath)}&session_id=${sessionId}`;
+  if (resourceType === 'video') {
+    url += '&resource_type=video';
+  }
+  return url;
+};
+
+const getImageMediaSrc = (media, original = false) => {
+  if (!media) {
+    return undefined;
+  }
+  const relative = original ? media.source : (media.thumb || media.source);
+  return buildRelativeResourceUrl(relative);
+};
+
+const getImageDisplaySrc = (original = false) => {
+  console.log("props.msg.media:", props.msg);
+  if (props.msg.media) {
+    return getImageMediaSrc(props.msg.media, original);
+  }
+  if (props.msg._image) {
+    const url = original ? (props.msg._image.originUrl || props.msg._image.thumbUrl) : props.msg._image.thumbUrl;
+    return getImageUrl(url);
+  }
+  return undefined;
+};
+
+const isAppMessage = (type) => {
+  return APP_MESSAGE_TYPES.has(type);
+};
+
+const referContent = (refer) => {
+  if (!refer) {
+    return '';
+  }
+  if (refer.contentText) {
+    return refer.displayname ? `${refer.displayname}: ${refer.contentText}` : refer.contentText;
+  }
+  if (refer.type && referTypeText[refer.type]) {
+    return `${refer.displayname || ''} ${referTypeText[refer.type]}`.trim();
+  }
+  return `${refer.displayname || ''} ${refer.content || ''}`.trim();
+};
+
+const miniProgramLink = () => {
+  if (!props.msg._appmsg) {
+    return 'javascript:void(0)';
+  }
+  if (props.msg._appmsg.url) {
+    return props.msg._appmsg.url;
+  }
+  return 'javascript:void(0)';
+};
+
+const getEmojiSrc = () => {
+  if (props.msg._emoji?.url) {
+    return getImageUrl(props.msg._emoji.url);
+  }
+  if (props.msg.media && props.msg.media.type === 'image') {
+    return getImageMediaSrc(props.msg.media);
+  }
+  return undefined;
+};
+
+const gotoReference = () => {
+  const svrId = props.msg._quote?.refer?.svrid;
+  if (svrId) {
+    emit('goto-msg', svrId);
+  }
+};
+
+const chatClasses = computed(() => {
+  if (!props.dialogMode) {
+    return {};
+  }
+  return {
+    right: isSender,
+    left: !isSender
+  }
+});
+
 </script>
 
 <template>
-  <div class="chat" :class="{'right': isSender, 'left': isSender === false}">
+  <div class="chat" :class="chatClasses">
     <div class="chat-header">
       <img :src="headImage(props.msg.sender)" @error="setDefaultImage" alt="" class="exclude"/>
     </div>
@@ -140,17 +253,86 @@ const isSender = props.msg.sender === store.getters.getCurrentWxId;
         <msg-text-with-emoji :content="props.msg.data.content"/>
       </div>
       <!-- 图片消息 -->
-<!--      <div class="chat-img" v-else-if="props.msg.local_type === 3">-->
-<!--        <p>-->
-<!--          {{ props.msg.data.content }}-->
-<!--        </p>-->
-<!--      </div>-->
-      <!-- 视频消息 -->
-<!--      <div v-else-if="props.msg.local_type === 43" class="chat-img exclude">-->
-<!--        <video controls width="250" :poster="`/api/resources-v4/video-poster/${store.getters.getCurrentSessionId}/${props.msg._video?.msg.videomsg['@attributes']?.md5}`">-->
-<!--          <source :src="`/api/resources-v4/video/${store.getters.getCurrentSessionId}/${props.msg._video?.msg.videomsg['@attributes']?.md5}`" type="video/mp4" />-->
-<!--        </video>-->
-<!--      </div>-->
+      <div class="chat-img" v-else-if="getImageDisplaySrc()">
+
+        <img
+            class="exclude"
+            :src="getImageDisplaySrc()"
+            :data-original="getImageDisplaySrc(true)"
+            alt="图片"/>
+      </div>
+      <div class="chat-text" v-else-if="props.msg.local_type === 3">
+        [图片消息暂无法加载]
+      </div>
+      <!-- 动画表情 -->
+      <div class="chat-emoji" v-else-if="props.msg.local_type === ANIMATED_EMOJI_TYPE">
+        <img v-if="getEmojiSrc()" class="exclude" :src="getEmojiSrc()" alt="表情"/>
+        <p class="emoji-desc" v-if="props.msg._emoji?.desc">{{ props.msg._emoji.desc }}</p>
+      </div>
+<!--       视频消息-->
+      <div v-else-if="props.msg.local_type === 43" class="chat-img exclude">
+        <video controls width="250" :poster="`/api/resources-v4/video-poster/${store.getters.getCurrentSessionId}/${props.msg._video?.msg.videomsg['@attributes']?.md5}`">
+          <source :src="`/api/resources-v4/video/${store.getters.getCurrentSessionId}/${props.msg._video?.msg.videomsg['@attributes']?.md5}`" type="video/mp4" />
+        </video>
+      </div>
+      <!-- 语音 -->
+      <div v-else-if="props.msg.local_type === 34" class="chat-media">
+        <AudioPlayer
+            :src="`/api/resources-v4/media?strUsrName=${props.roomId}&MsgSvrID=${props.msg.server_id}&session_id=${store.getters.getCurrentSessionId}`"
+            :text="props.msg.message_content_data || props.msg.data.content"
+            :right="isSender"/>
+      </div>
+      <!-- 引用消息 -->
+      <div class="chat-text" v-else-if="props.msg.local_type === QUOTE_TYPE">
+        <p>
+          {{ props.msg.data.content }}
+        </p>
+        <div class="refer-msg clickable" v-if="props.msg._quote?.refer" @click="gotoReference">
+          <p class="refer-text">
+            {{ referContent(props.msg._quote.refer) }}
+          </p>
+        </div>
+      </div>
+      <!-- 红包 -->
+      <div class="chat-redpacket" v-else-if="props.msg.local_type === RED_ENVELOPE_TYPE">
+        <div class="redpacket-left">
+          <div class="redpacket-icon" v-if="props.msg._redEnvelope?.iconUrl">
+            <img class="exclude" :src="getImageUrl(props.msg._redEnvelope.iconUrl)" alt="红包"/>
+          </div>
+          <font-awesome-icon v-else class="redpacket-icon redpacket-icon-default" :icon="['fas', 'gift']"/>
+        </div>
+        <div class="redpacket-body">
+          <p class="title">{{ props.msg._redEnvelope?.title || '微信红包' }}</p>
+          <p class="desc">点击查看红包</p>
+        </div>
+        <div class="redpacket-footer">
+          <span>微信红包</span>
+        </div>
+      </div>
+      <!-- 拍一拍 -->
+      <div class="chat-pat" v-else-if="props.msg.local_type === PAT_TYPE">
+        <p>{{ props.msg._pat?.title || props.msg._pat?.template || '拍了拍你' }}</p>
+      </div>
+      <!-- 小程序 / 卡片 -->
+      <a class="chat-appmsg"
+         v-else-if="isAppMessage(props.msg.local_type) && props.msg._appmsg"
+         :href="miniProgramLink()"
+         target="_blank"
+         rel="noreferrer">
+        <div class="appmsg-cover" v-if="props.msg._appmsg.cover">
+          <img class="exclude" :src="getImageUrl(props.msg._appmsg.cover)" alt="cover"/>
+        </div>
+        <div class="appmsg-body">
+          <p class="appmsg-title">{{ props.msg._appmsg.title }}</p>
+          <p class="appmsg-desc">{{ props.msg._appmsg.desc }}</p>
+          <p class="appmsg-app">{{ props.msg._appmsg.appname || props.msg._appmsg.sourcedisplayname }}</p>
+        </div>
+      </a>
+      <!-- 语音 / 视频通话 -->
+      <div class="chat-phone" v-else-if="props.msg.local_type === 50">
+        <font-awesome-icon class="icon-file" :icon="['fas', props.msg._voip?.mode === 'video' ? 'video' : 'phone']" title="通话"/>
+        {{ props.msg._voip?.text || '[通话记录]' }}
+      </div>
       <div class="chat-text" v-else>
         <p>
           [不支持的消息类型: {{get_msg_desc(props.msg.local_type)}}]
@@ -334,6 +516,141 @@ const isSender = props.msg.sender === store.getters.getCurrentWxId;
 .chat.left .chat-info:hover {
   .chat-text {
     background-color: #ebebeb;
+  }
+}
+
+.chat-emoji {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  img {
+    max-width: 8rem;
+    max-height: 8rem;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+  .emoji-desc {
+    margin-top: 0.357rem;
+    font-size: 0.857rem;
+    color: #777;
+  }
+}
+
+.chat-redpacket {
+  width: 16.429rem;
+  border-radius: 0.571rem;
+  padding: 0.714rem;
+  background: linear-gradient(135deg, #f04d2d, #f26b1f);
+  color: #fff7e6;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 0.857rem;
+  box-shadow: 0 6px 18px rgba(240, 77, 45, 0.35);
+  .redpacket-left {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .redpacket-icon,
+  .redpacket-icon-default {
+    width: 3.143rem;
+    height: 3.143rem;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff7e6;
+    font-size: 1.286rem;
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+  }
+  .redpacket-body {
+    flex: 1;
+    .title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+    }
+    .desc {
+      font-size: 0.857rem;
+      margin-top: 0.214rem;
+      color: rgba(255, 255, 255, 0.85);
+    }
+  }
+  .redpacket-footer {
+    position: absolute;
+    right: 0.857rem;
+    bottom: 0.357rem;
+    font-size: 0.714rem;
+    opacity: 0.8;
+  }
+}
+
+.chat.right .chat-redpacket {
+  background: linear-gradient(135deg, #f6a449, #fbd084);
+  color: #442400;
+  .redpacket-icon,
+  .redpacket-icon-default {
+    background-color: rgba(255, 255, 255, 0.35);
+    color: #442400;
+  }
+  .redpacket-footer {
+    color: rgba(68, 36, 0, 0.6);
+  }
+}
+
+.chat-pat {
+  background-color: #fff6f0;
+  border: 1px solid #ffd8c2;
+  border-radius: 0.357rem;
+  padding: 0.5rem 0.857rem;
+  width: fit-content;
+  color: #c95c2c;
+}
+.refer-msg.clickable {
+  cursor: pointer;
+}
+.chat-appmsg {
+  display: block;
+  width: 18.571rem;
+  padding: 0.714rem;
+  background-color: #FFFFFF;
+  border: 1px solid #EDEDED;
+  border-radius: 0.357rem;
+  color: #232323;
+  text-decoration: none;
+  .appmsg-cover {
+    width: 100%;
+    height: 8.571rem;
+    margin-bottom: 0.357rem;
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 0.214rem;
+    }
+  }
+  .appmsg-title {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .appmsg-desc {
+    font-size: 0.857rem;
+    color: #757575;
+    margin-top: 0.214rem;
+  }
+  .appmsg-app {
+    font-size: 0.786rem;
+    color: #a8a8a8;
+    margin-top: 0.286rem;
   }
 }
 </style>

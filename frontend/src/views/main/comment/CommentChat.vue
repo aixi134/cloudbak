@@ -1,5 +1,5 @@
 <script setup>
-import {reactive, ref} from "vue";
+import {computed, reactive, ref} from "vue";
 import {useRoute} from "vue-router";
 import {msgs, session as getSession, chatroomInfo} from "@/api/msg.js"
 import {useStore} from "vuex";
@@ -23,10 +23,12 @@ const id = route.params.id
 const isChatRoom = id.includes('@chatroom');
 const userLength = ref(0);
 const chatMapBySvrId = reactive({});
+const msgElementMap = new Map();
 const chatRoomNameMap = reactive({});
 const showTool = ref(false);
 const showFilter = ref(false);
 const selfDisplayName = ref('');
+const dialogLayout = ref(false);
 
 const initChatroomInfo = (info) => {
   selfDisplayName.value = info.self_display_name;
@@ -69,6 +71,8 @@ const session = reactive({})
 
 const isTop = ref(false);
 const msg_list = reactive([])
+const msgListV3 = computed(() => msg_list.map(m => m?.windows_v3_properties).filter(m => !!m));
+const msgListV4 = computed(() => msg_list.map(m => m?.windows_v4_properties).filter(m => !!m));
 
 const imageOptions = reactive({
   // 配置选项
@@ -95,7 +99,9 @@ const loadSession = () => {
 loadSession();
 
 const loadData = () => {
+  console.log("isLoading.value1:")
   if (!noMoreMsg.value) {
+    console.log("isLoading.value2:")
     isLoading.value = true;
     // 其他按照对话处理
     msgs(query).then(resp => {
@@ -107,7 +113,18 @@ const loadData = () => {
         query.start = resp.start;
         // 设置起始数据库名
         query.start_db = resp.start_db;
+        const isV4 = store.getters.getClientVersion === 'win.v4';
         for (let c of resp.messages) {
+          if (!c) {
+            continue;
+          }
+          if (isV4) {
+            if (!c.windows_v4_properties) {
+              continue;
+            }
+          } else if (!c.windows_v3_properties) {
+            continue;
+          }
           msg_list.push(c);
           // // 图片类型存一份到映射中方便引用类型查找
           // if (c.Type === 3 && c.SubType === 0) {
@@ -183,28 +200,56 @@ const loadMore = () => {
 };
 
 const shouldDisplayTimestampV3 = (currentTimestamp, index) => {
+  const list = msgListV3.value;
   let nextIndex = index + 1;
-  // 最后一条消息输出时间
-  if (msg_list.length < nextIndex + 1) {
+  if (list.length < nextIndex + 1) {
     return true;
   }
-  let last = msg_list[index + 1]
-  return (currentTimestamp - last.windows_v3_properties.CreateTime) > 600;
+  let last = list[index + 1]
+  return (currentTimestamp - last.CreateTime) > 600;
 }
 
 const shouldDisplayTimestampV4 = (currentTimestamp, index) => {
+  const list = msgListV4.value;
   let nextIndex = index + 1;
-  // 最后一条消息输出时间
-  if (msg_list.length < nextIndex + 1) {
+  if (list.length < nextIndex + 1) {
     return true;
   }
-  let last = msg_list[index + 1]
-  return (currentTimestamp - last.windows_v4_properties.create_time) > 600;
+  let last = list[index + 1]
+  return (currentTimestamp - last.create_time) > 600;
 }
 
 const closeFilter = () => {
   showFilter.value = false;
 }
+const setMsgRef = (serverId, el) => {
+  if (!serverId) {
+    return;
+  }
+  const key = serverId.toString();
+  if (el) {
+    msgElementMap.set(key, el);
+  } else {
+    msgElementMap.delete(key);
+  }
+};
+
+const scrollToMsg = (serverId) => {
+  if (!serverId || !chatContainer.value) {
+    return;
+  }
+  const key = serverId.toString();
+  const target = msgElementMap.get(key);
+  if (target) {
+    const top = target.offsetTop - chatContainer.value.offsetTop - 40;
+    chatContainer.value.scrollTo({
+      top,
+      behavior: 'smooth'
+    });
+  } else {
+    store.commit("showErrorToastMsg", { msg: "未找到引用消息，请加载更多后重试" });
+  }
+};
 // 移动端返回
 const emit = defineEmits(['goBack']);
 
@@ -224,6 +269,7 @@ const titleShorten = (title) => {
       <p class="main-content-title">{{ getContactName(id) }}</p>
       <p class="main-content-title" v-if="isChatRoom"> ({{userLength}})</p>
       <p style="flex-grow: 1"></p>
+      <p class="main-content-toolbar" @click="dialogLayout = !dialogLayout">{{ dialogLayout ? '单列' : '对话' }}</p>
       <p class="main-content-toolbar" @click="showTool?showTool=false:showTool=true">...</p>
     </div>
     <div class="main-content-info"
@@ -235,48 +281,54 @@ const titleShorten = (title) => {
       <div class="chat-grow">
       </div>
       <!-- win.v3-->
-      <div v-if="store.getters.getClientVersion === 'win.v3'" class="chat-container" v-for="(m, index) in msg_list" :key="m">
-        <div class="tips" v-if="shouldDisplayTimestampV3(m.windows_v3_properties.CreateTime, index)">
+      <div v-if="store.getters.getClientVersion === 'win.v3'" class="chat-container" v-for="(m, index) in msgListV3" :key="m.localId || `v3-${index}`">
+        <div class="tips" v-if="shouldDisplayTimestampV3(m.CreateTime, index)">
           <p class="tips-content">
-            {{ formatMsgDate(m.windows_v3_properties.CreateTime) }}
+            {{ formatMsgDate(m.CreateTime) }}
           </p>
         </div>
         <!-- 系统消息 -->
         <MsgSysMsg
-            v-if="m.windows_v3_properties.Type === 10000"
-            :msg="m.windows_v3_properties"></MsgSysMsg>
+            v-if="m.Type === 10000"
+            :msg="m"></MsgSysMsg>
         <!-- 特殊的简单通知类型，已知为QQ邮箱 -->
         <MsgPushMail
-            v-else-if="m.windows_v3_properties.Type === 35 && m.windows_v3_properties.SubType === 0"
-            :msg="m.windows_v3_properties"></MsgPushMail>
+            v-else-if="m.Type === 35 && m.SubType === 0"
+            :msg="m"></MsgPushMail>
         <!-- 通知类消息，主要为公众号，服务号通知等 -->
         <MsgNotice
-            v-else-if="m.windows_v3_properties.Type === 49 && m.windows_v3_properties.SubType === 5 && !id.startsWith('wxid_') && !id.endsWith('@chatroom')"
-            :msg="m.windows_v3_properties"></MsgNotice>
+            v-else-if="m.Type === 49 && m.SubType === 5 && !id.startsWith('wxid_') && !id.endsWith('@chatroom')"
+            :msg="m"></MsgNotice>
         <MsgHeadTemplate
             v-else
             :roomId="route.params.id"
-            :msg="m.windows_v3_properties"
+            :msg="m"
             :chatRoomNameMap="chatRoomNameMap"
             :isChatRoom="isChatRoom"
+            :dialog-mode="dialogLayout"
         ></MsgHeadTemplate>
       </div>
-      <div v-if="store.getters.getClientVersion === 'win.v4'" class="chat-container" v-for="(m, index) in msg_list" :key="m">
-        <div class="tips" v-if="shouldDisplayTimestampV4(m.windows_v4_properties.create_time, index)">
+      <div v-if="store.getters.getClientVersion === 'win.v4'" class="chat-container"
+           v-for="(m, index) in msgListV4"
+           :key="m.server_id || `v4-${index}`"
+           :ref="el => setMsgRef(m.server_id, el)">
+        <div class="tips" v-if="shouldDisplayTimestampV4(m.create_time, index)">
           <p class="tips-content">
-            {{ formatMsgDate(m.windows_v4_properties.create_time) }}
+            {{ formatMsgDate(m.create_time) }}
           </p>
         </div>
         <!-- 系统消息 -->
         <MsgSysMsgV4
-            v-if="m.windows_v4_properties.local_type === 10000"
-            :msg="m.windows_v4_properties"></MsgSysMsgV4>
+            v-if="m.local_type === 10000"
+            :msg="m"></MsgSysMsgV4>
         <MsgHeadTemplateV4
             v-else
             :roomId="route.params.id"
-            :msg="m.windows_v4_properties"
+            :msg="m"
             :chatRoomNameMap="chatRoomNameMap"
             :isChatRoom="isChatRoom"
+            :dialog-mode="dialogLayout"
+            @goto-msg="scrollToMsg"
         ></MsgHeadTemplateV4>
       </div>
       <div class="load-more">

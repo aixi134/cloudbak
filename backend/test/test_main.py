@@ -34,7 +34,7 @@ def decode(data):
 # print(decode(data))
 # f.close()
 
-wx_dir = "D:\\wxdec\\wx\\jianghu\\wxid_b125nd5rc59r12\\Msg\\Multi\\decoded_MSG5.db"
+wx_dir = "D:\\py-work\\cloudbak\\backend\\data\\sessions\\1\\wxid_7jo9da638dml22\\db_storage\\message\\decoded_message_5.db"
 
 session_local = get_session_local(wx_dir)
 db = session_local()
@@ -48,7 +48,7 @@ db = session_local()
 #     db.close()
 
 try:
-    msg = db.query(Msg).filter_by(localId=302).first()
+    msg = db.query(Msg).filter_by(localId=1).first()
     # print(decode(msg.BytesExtra))
     proto_msg = deserialize_proto_message(msg.BytesExtra)
     # 输出反序列化后的数据
