@@ -149,7 +149,7 @@ async def get_video_thumb(md5: str, session_id: int):
     """
     client = ClientFactory.get_client_by_id(session_id)
     resource_manager = client.get_resource_manager()
-    path = resource_manager.get_video_poster(md5)
+    path = resource_manager.get_video_poster(md5, 1763202684)
     if not path:
         raise HTTPException(status_code=405, detail="file not found")
     if not os.path.exists(path):
@@ -165,7 +165,7 @@ async def get_video_thumb(md5: str, session_id: int):
     """
     client = ClientFactory.get_client_by_id(session_id)
     resource_manager = client.get_resource_manager()
-    path = resource_manager.get_video(md5)
+    path = resource_manager.get_video(md5, 1763202684)
     if not path:
         raise HTTPException(status_code=405, detail="file not found")
     if not os.path.exists(path):

@@ -70,7 +70,8 @@ class WindowsV4ResourceManager(ResourceManager):
                     logger.error('保存头像错误', e)
         logger.info("head_image库中不存在数据")
         return None
-
+    def _get_table_version(self):
+        return 4
     def get_video_poster(self, md5: str, msg_create_time: int) -> str | None:
         # 优先从表中获取
         logger.info("从hardlink表中获取视频封面")
@@ -123,7 +124,7 @@ class WindowsV4ResourceManager(ResourceManager):
         logger.info(f"poster_abs_path: {poster_abs_path}")
         if os.path.exists(poster_abs_path):
             logger.info(f"poster_abs_path: {poster_abs_path} 存在")
-            return poster_abs_path  
+            return poster_abs_path
         poster_name = f"{md5}_thumb.jpg"
         poster_abs_path = os.path.join(folder, poster_name)
         logger.info(f"poster_abs_path: {poster_abs_path}")
