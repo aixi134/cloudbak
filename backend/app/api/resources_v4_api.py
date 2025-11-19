@@ -76,9 +76,20 @@ async def relative_resource(
 
 
     b64 = decrypt_wechat_dat(file_path)
-
-
-    return b64
+    # b64 可能是 data URI，也可能是纯 base64，统一转为二进制流返回正确的 Content-Type
+    if b64.startswith("data:"):
+        header, payload = b64.split(",", 1)
+        # data:image/jpeg;base64,xxxx
+        try:
+            mime = header.split(":")[1].split(";")[0]
+        except Exception:
+            mime = "application/octet-stream"
+        raw_bytes = base64.b64decode(payload)
+    else:
+        # 默认按图片处理
+        mime = "image/jpeg" if resource_type == ResourceType.IMAGE else "application/octet-stream"
+        raw_bytes = base64.b64decode(b64)
+    return StreamingResponse(io.BytesIO(raw_bytes), media_type=mime)
 
 
 

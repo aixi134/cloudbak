@@ -155,8 +155,19 @@ const buildRelativeResourceUrl = (relativePath, resourceType = 'image') => {
   if (!relativePath) {
     return undefined;
   }
+  // 兼容后端直接返回的 base64 内容（无 data: 前缀）
+  if (typeof relativePath === 'string') {
+    if (relativePath.startsWith('data:')) {
+      return relativePath;
+    }
+    const isRawBase64 = /^[A-Za-z0-9+/]+={0,2}$/.test(relativePath) && relativePath.length > 100;
+    if (isRawBase64) {
+      const mime = resourceType === 'video' ? 'video/mp4' : 'image/jpeg';
+      return `data:${mime};base64,${relativePath}`;
+    }
+  }
   const sessionId = store.getters.getCurrentSessionId;
-  let url = `./api/resources-v4/relative-resource?relative_path=${encodeURIComponent(relativePath)}&session_id=${sessionId}`;
+  let url = `/api/resources-v4/relative-resource?relative_path=${encodeURIComponent(relativePath)}&session_id=${sessionId}`;
   if (resourceType === 'video') {
     url += '&resource_type=video';
   }
@@ -172,7 +183,6 @@ const getImageMediaSrc = (media, original = false) => {
 };
 
 const getImageDisplaySrc = (original = false) => {
-  console.log("props.msg.media:", props.msg);
   if (props.msg.media) {
     return getImageMediaSrc(props.msg.media, original);
   }

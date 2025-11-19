@@ -190,10 +190,20 @@ def decrypt_wechat_dat(dat_path: str):
         except Exception as exc:
             print(f"[!] WxGF 转换失败: {exc}")
 
-    # 5. 生成 base64
+    # 5. 生成 base64，并补全 data URI 前缀
     b64 = base64.b64encode(raw).decode("utf-8")
+    mime = "application/octet-stream"
+    if ext and ext.lower() in ("jpg", "jpeg"):
+        mime = "image/jpeg"
+    elif ext and ext.lower() == "png":
+        mime = "image/png"
+    elif ext and ext.lower() == "gif":
+        mime = "image/gif"
+    elif ext and ext.lower() in ("mp4", "mov"):
+        mime = "video/mp4"
+    data_uri = f"data:{mime};base64,{b64}"
 
-    return b64
+    return data_uri
     # return {
     #     "version": version,
     #     "raw_bytes": raw,
