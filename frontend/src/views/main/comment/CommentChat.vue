@@ -269,7 +269,6 @@ const titleShorten = (title) => {
       <p class="main-content-title">{{ getContactName(id) }}</p>
       <p class="main-content-title" v-if="isChatRoom"> ({{userLength}})</p>
       <p style="flex-grow: 1"></p>
-      <p class="main-content-toolbar" @click="dialogLayout = !dialogLayout">{{ dialogLayout ? '单列' : '对话' }}</p>
       <p class="main-content-toolbar" @click="showTool?showTool=false:showTool=true">...</p>
     </div>
     <div class="main-content-info"

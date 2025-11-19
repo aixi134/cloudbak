@@ -1,4 +1,4 @@
-* {
+﻿* {
   box-sizing: border-box;
 }
 /* Define an animation behavior */
@@ -70,6 +70,7 @@
       .chat {
         margin-top: 0.714rem;
         display: flex;
+        direction: ltr;
         .chat-header {
           width: 2.5rem;
           height: 2.5rem;
@@ -86,7 +87,6 @@
             font-size: 0.857rem;
             color: #BEBEBE;
             text-align: left;
-            direction: ltr;
           }
           .chat-text {
             direction: ltr;
@@ -95,140 +95,57 @@
             padding: 0.357rem 0.714rem;
             border-radius: 0.357rem;
             display: inline-block;
-            //box-shadow: 0 0 0.714rem rgba(0, 0, 0, 0.1);
             color: #232323;
             word-wrap: break-word;
             max-width: 28.571rem;
           }
-          .chat-text:hover {
-            background-color: #EBEBEB;
-          }
           .chat-img {
             border-radius: 0.286rem;
-            //border: 0.071rem solid lightgray;
             img {
               max-width: 14.286rem;
             }
           }
-          .chat-img:hover {
-            cursor: pointer;
-          }
-          .chat-media {
-
-          }
-          .chat-phone {
-            background-color: #FFFFFF;
-            border-radius: 5px;
-          }
           .refer-msg {
             direction: ltr;
             margin-top: 0.357rem;
-            .refer-text {
-              font-size: 0.857rem;
-              background-color: #E8E8E8;
-              color: #797979;
-              padding: 0.357rem;
-              border-radius: 0.214rem;
-              display: inline-block;
-              max-width: 28.571rem;
-              // 长文本换行
-              word-wrap: break-word;
-              word-break: break-all;
-              .icon-file {
-                color: #207346;
-              }
-            }
-            .refer-img {
-              font-size: 0.857rem;
-              background-color: #E8E8E8;
-              color: #797979;
-              padding: 0.357rem 0.714rem;
-              border-radius: 0.214rem;
-              display: inline-block;
-            }
           }
           .chat-file {
             direction: ltr;
-            height: 7.143rem;
             background-color: #FFFFFF;
             border-radius: 0.357rem;
-            .chat-file-top {
-              height: 5.357rem;
-              border-bottom: 0.071rem solid #f0f0f0;
-              display: flex;
-              padding: 0.714rem;
-              .chat-file-left {
-                width: 16.429rem;
-                height: 100%;
-                .chat-file-title {
-                  font-size: 1rem;
-                }
-                .chat-file-content {
-                  font-size: 0.857rem;
-                  color: #797979;
-                  align-items: center;
-                }
-              }
-              .chat-file-icon {
-                width: 3.571rem;
-                height: 100%;
-                font-size: 2.143rem;
-                text-align: center;
-                color: #207346;
-                .item-icon {
-                  width: 2.857rem;
-                }
-              }
-            }
-            .chat-file-bottom {
-              .chat-file-app-info {
-                font-size: 0.786rem;
-                color: #797979;
-                padding-left: 0.714rem;
-                line-height: 1.786rem;
-              }
-            }
-          }
-          .chat-file:hover {
-            cursor: pointer;
           }
         }
       }
       .chat:last-child {
         margin-bottom: 0.429rem;
       }
+      .chat.chat-right,
       .chat.right {
+        flex-direction: row-reverse;
         .chat-info {
-          .chat-nickname {
-            text-align: right;
-          }
+          text-align: right;
           .chat-text {
-            text-align: left;
             background-color: #95ec69;
           }
         }
       }
+      .chat.chat-left,
       .chat.left {
-        flex-direction: row-reverse;
+        flex-direction: row;
         .chat-info {
           text-align: left;
-          .chat-nickname {
-            text-align: left;
-          }
           .chat-text {
-            text-align: left;
             background-color: #FFFFFF;
-          }
-          .chat-media {
-            direction: ltr;
           }
         }
       }
+      .chat.chat-right .chat-info:hover,
       .chat.right .chat-info:hover {
         .chat-text {
           background-color: #89D961;
         }
       }
+      .chat.chat-left .chat-info:hover,
       .chat.left .chat-info:hover {
         .chat-text {
           background-color: #ebebeb;
@@ -358,4 +275,22 @@
   .chat-file {
     width: 21.429rem;
   }
+}
+
+
+
+
+
+/* ---- v4 chat alignment overrides ---- */
+.main-content .main-content-info .chat-container .chat {
+  direction: ltr;
+  display: flex;
+}
+.main-content .main-content-info .chat-container .chat.chat-right,
+.main-content .main-content-info .chat-container .chat.right {
+  flex-direction: row-reverse;
+}
+.main-content .main-content-info .chat-container .chat.chat-left,
+.main-content .main-content-info .chat-container .chat.left {
+  flex-direction: row;
 }

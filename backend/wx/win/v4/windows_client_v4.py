@@ -33,6 +33,9 @@ class WindowsClientV4(ClientInterface, ABC):
 
     def get_real_wx_id(self):
         wx_id = self.get_sys_session().wx_id
+        wx_array = wx_id.rsplit('_')
+        if(len(wx_array) == 2):
+            return wx_id
         real_wx_id = wx_id.rsplit('_', 1)[0]
         logger.info(f"微信4 id{wx_id}，真实id {real_wx_id}")
         return real_wx_id

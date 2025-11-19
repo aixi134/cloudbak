@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import defaultImage from '@/assets/default-head.svg';
 import AudioPlayer from "../AudioPlayer.vue";
 import unknownFile from '@/assets/filetypeicon/unknown.svg';
@@ -55,6 +55,10 @@ const props = defineProps({
 });
 
 const chatMapBySvrId = reactive({});
+const previewState = reactive({
+  visible: false,
+  url: ''
+});
 const referTypeText = {
   '1': '[文本]',
   '3': '[图片]',
@@ -146,16 +150,100 @@ const getImageUrl = (url) => {
   return defaultImage;
 }
 
-// 解析数据
-parseMsg(props.msg)
+const resolveCurrentWxId = () => {
+  const rawGetter = store.getters?.getCurrentWxId;
+  let currentWxId;
+  if (typeof rawGetter === 'function') {
+    try {
+      currentWxId = rawGetter();
+    } catch (error) {
+      console.warn('[MsgHeadTemplate] 读取当前微信 ID 失败', error);
+    }
+  } else {
+    currentWxId = rawGetter;
+  }
+  if (currentWxId && typeof currentWxId === 'object') {
+    currentWxId = currentWxId.wxid
+      || currentWxId.wx_id
+      || currentWxId.wxId
+      || currentWxId.id
+      || currentWxId.username;
+  }
+  return typeof currentWxId === 'string' ? currentWxId : '';
+};
 
-const isSender = props.msg.sender === store.getters.getCurrentWxId;
+const normalizeWxId = (value) => {
+  if (!value) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'object') {
+    return value.user_name
+      || value.username
+      || value.wxid
+      || value.wx_id
+      || value.wxId
+      || value.strUsrName
+      || value.id
+      || '';
+  }
+  return '';
+};
+
+const resolveMessageSender = (msg) => {
+  if (!msg) {
+    return '';
+  }
+  return normalizeWxId(msg.sender)
+    || normalizeWxId(msg.fromusername)
+    || normalizeWxId(msg.data?.sender)
+    || normalizeWxId(msg.data?.fromusername);
+};
+
+// 判断消息是否来自当前用户
+const isSelf = computed(() => {
+  const wxid = resolveCurrentWxId();
+  const senderWxid = resolveMessageSender(props.msg);
+  const flags = {
+    is_sender: props.msg?.is_sender,
+    is_send: props.msg?.is_send,
+    IsSender: props.msg?.IsSender,
+    sender: props.msg?.sender,
+    fromusername: props.msg?.fromusername,
+    dataSender: props.msg?.data?.sender,
+    dataFrom: props.msg?.data?.fromusername,
+    senderWxid,
+  };
+  let result;
+  if (props.msg?.is_sender !== undefined) {
+    result = !!props.msg.is_sender;
+  } else if (props.msg?.is_send !== undefined) {
+    result = !!props.msg.is_send;
+  } else if (props.msg?.IsSender !== undefined) {
+    result = !!props.msg.IsSender;
+  } else if (senderWxid) {
+    result = senderWxid === wxid;
+  } else {
+    result = false;
+  }
+  console.log('[MsgHeadTemplate] isSelf', result, {
+    wxid,
+    ...flags,
+    server_id: props.msg?.server_id,
+    local_id: props.msg?.local_id,
+  });
+  return !result;
+});
+parseMsg(props.msg, resolveCurrentWxId())
+
 
 const buildRelativeResourceUrl = (relativePath, resourceType = 'image') => {
   if (!relativePath) {
     return undefined;
   }
-  // 兼容后端直接返回的 base64 内容（无 data: 前缀）
+  // 兼容后端直接返回 base64 内容（无 data: 前缀）
   if (typeof relativePath === 'string') {
     if (relativePath.startsWith('data:')) {
       return relativePath;
@@ -191,6 +279,19 @@ const getImageDisplaySrc = (original = false) => {
     return getImageUrl(url);
   }
   return undefined;
+};
+
+const openImageOriginal = () => {
+  const url = getImageDisplaySrc(true);
+  if (url) {
+    previewState.url = url;
+    previewState.visible = true;
+  }
+};
+
+const closePreview = () => {
+  previewState.visible = false;
+  previewState.url = '';
 };
 
 const isAppMessage = (type) => {
@@ -237,24 +338,28 @@ const gotoReference = () => {
   }
 };
 
-const chatClasses = computed(() => {
-  if (!props.dialogMode) {
-    return {};
-  }
-  return {
-    right: isSender,
-    left: !isSender
-  }
-});
+const chatClasses = computed(() => ({
+  'chat-right': isSelf.value,
+  'chat-left': !isSelf.value,
+}));
+
+const chatStyle = computed(() => ({
+  flexDirection: isSelf.value ? 'row-reverse' : 'row',
+}));
+
+const chatInfoStyle = computed(() => ({
+  alignItems: isSelf.value ? 'flex-end' : 'flex-start',
+  textAlign: isSelf.value ? 'right' : 'left',
+}));
 
 </script>
 
 <template>
-  <div class="chat" :class="chatClasses">
+  <div class="chat" :class="chatClasses" :style="chatStyle">
     <div class="chat-header">
       <img :src="headImage(props.msg.sender)" @error="setDefaultImage" alt="" class="exclude"/>
     </div>
-    <div class="chat-info">
+    <div class="chat-info" :style="chatInfoStyle">
       <div class="chat-nickname" v-if="props.isChatRoom">
         <p v-if="props.isChatRoom"> {{ displayName(props.msg.sender) }} </p>
       </div>
@@ -263,7 +368,7 @@ const chatClasses = computed(() => {
         <msg-text-with-emoji :content="props.msg.data.content"/>
       </div>
       <!-- 图片消息 -->
-      <div class="chat-img" v-else-if="getImageDisplaySrc()">
+      <div class="chat-img" v-else-if="getImageDisplaySrc()" @click="openImageOriginal">
 
         <img
             class="exclude"
@@ -290,7 +395,7 @@ const chatClasses = computed(() => {
         <AudioPlayer
             :src="`/api/resources-v4/media?strUsrName=${props.roomId}&MsgSvrID=${props.msg.server_id}&session_id=${store.getters.getCurrentSessionId}`"
             :text="props.msg.message_content_data || props.msg.data.content"
-            :right="isSender"/>
+            :right="isSelf"/>
       </div>
       <!-- 引用消息 -->
       <div class="chat-text" v-else-if="props.msg.local_type === QUOTE_TYPE">
@@ -319,11 +424,11 @@ const chatClasses = computed(() => {
           <span>微信红包</span>
         </div>
       </div>
-      <!-- 拍一拍 -->
+      <!-- 拍一拍-->
       <div class="chat-pat" v-else-if="props.msg.local_type === PAT_TYPE">
         <p>{{ props.msg._pat?.title || props.msg._pat?.template || '拍了拍你' }}</p>
       </div>
-      <!-- 小程序 / 卡片 -->
+      <!-- 小程序/卡片 -->
       <a class="chat-appmsg"
          v-else-if="isAppMessage(props.msg.local_type) && props.msg._appmsg"
          :href="miniProgramLink()"
@@ -351,12 +456,21 @@ const chatClasses = computed(() => {
 
     </div>
   </div>
+
+  <Teleport to="body">
+    <div v-if="previewState.visible" class="image-preview-mask" @click="closePreview">
+      <img :src="previewState.url" alt="preview" @click.stop />
+    </div>
+  </Teleport>
 </template>
 
 <style scoped lang="less">
 .chat {
   margin-top: 0.714rem;
   display: flex;
+  align-items: flex-start;
+  width: 100%;
+  box-sizing: border-box;
   .chat-header {
     width: 2.5rem;
     height: 2.5rem;
@@ -367,6 +481,9 @@ const chatClasses = computed(() => {
     }
   }
   .chat-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     padding-left: 0.714rem;
     padding-right: 0.714rem;
     .chat-nickname {
@@ -485,24 +602,11 @@ const chatClasses = computed(() => {
 .chat:last-child {
   margin-bottom: 1.429rem;
 }
-.chat.right {
-  .chat-info {
-    .chat-nickname {
-      text-align: right;
-    }
-    .chat-text {
-      text-align: left;
-      background-color: #95ec69;
-    }
-    .chat-phone {
-      background-color: #95ec69;
-    }
-  }
-}
-.chat.left {
-  flex-direction: row-reverse;
+.chat.chat-left {
+  flex-direction: row;
   .chat-info {
     text-align: left;
+    align-items: flex-start;
     .chat-nickname {
       text-align: left;
     }
@@ -518,12 +622,36 @@ const chatClasses = computed(() => {
     }
   }
 }
-.chat.right .chat-info:hover {
+.chat.chat-right {
+  flex-direction: row-reverse;
+  .chat-header {
+    margin-left: 0.5rem;
+  }
+  .chat-info {
+    text-align: right;
+    align-items: flex-end;
+    .chat-nickname {
+      text-align: right;
+    }
+    .chat-text {
+      text-align: left;
+      background-color: #95ec69;
+    }
+    .chat-media {
+      direction: ltr;
+      text-align: left;
+    }
+    .chat-phone {
+      background-color: #95ec69;
+    }
+  }
+}
+.chat.chat-right .chat-info:hover {
   .chat-text {
     background-color: #89D961;
   }
 }
-.chat.left .chat-info:hover {
+.chat.chat-left .chat-info:hover {
   .chat-text {
     background-color: #ebebeb;
   }
@@ -604,7 +732,7 @@ const chatClasses = computed(() => {
   }
 }
 
-.chat.right .chat-redpacket {
+.chat.chat-right .chat-redpacket {
   background: linear-gradient(135deg, #f6a449, #fbd084);
   color: #442400;
   .redpacket-icon,
@@ -663,4 +791,33 @@ const chatClasses = computed(() => {
     margin-top: 0.286rem;
   }
 }
+
+.image-preview-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 9999;
+  overflow: auto;
+  img {
+    max-width: 90vw !important;
+    max-height: 90vh !important;
+    width: auto;
+    height: auto;
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+    border-radius: 4px;
+  }
+}
 </style>
+
+
+
+
+
+
