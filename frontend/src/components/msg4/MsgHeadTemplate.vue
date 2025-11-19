@@ -228,12 +228,12 @@ const isSelf = computed(() => {
   } else {
     result = false;
   }
-  console.log('[MsgHeadTemplate] isSelf', result, {
-    wxid,
-    ...flags,
-    server_id: props.msg?.server_id,
-    local_id: props.msg?.local_id,
-  });
+  // console.log('[MsgHeadTemplate] isSelf', result, {
+  //   wxid,
+  //   ...flags,
+  //   server_id: props.msg?.server_id,
+  //   local_id: props.msg?.local_id,
+  // });
   return !result;
 });
 parseMsg(props.msg, resolveCurrentWxId())
