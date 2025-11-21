@@ -222,24 +222,47 @@ class MessageManagerWindowsV4(MessageManager):
         server_id = filter_obj.server_sequence or filter_obj.v3_msg_svr_id
 
         db_arrays = self.get_table_name_db_list(filter_obj.username, table_name)
+
+        name2id_subquery = (
+            select(
+                literal_column("Name2Id.rowid").label("row_num"),
+                Name2Id.user_name
+            ).subquery("b")
+        )
+        stmt = (
+            select(message_model, name2id_subquery)
+            .join(name2id_subquery, message_model.real_sender_id == name2id_subquery.c.row_num, isouter=True)
+        )
         for db_name in db_arrays:
             if target_db and db_name != target_db:
                 continue
             sm = self.get_message_session_maker_by_db_name(db_name)
             with sm() as db:
-                query = db.query(message_model)
+
+                # 创建动态条件列表
+                conditions = []
                 if filter_obj.local_id is not None:
-                    query = query.filter(message_model.local_id == filter_obj.local_id)
-                elif server_id is not None:
-                    query = query.filter(message_model.server_id == server_id)
-                else:
-                    continue
-                msg = query.first()
-                if msg:
-                    logger.info(f"msg is : {msg}")
-                    target_db = db_name
-                    target_msg = msg
-                    break
+                    conditions.append(message_model.local_id == filter_obj.local_id)
+                if server_id is not None:
+                    conditions.append(message_model.server_id == server_id)
+                # 一次性应用条件
+                if conditions:
+                    stmt = stmt.where(*conditions)
+
+                row = db.execute(stmt).first()
+                if row:
+                    logger.info(f"msg is : {row}")
+
+                    m = row[0]
+                    n = row[2] if len(row) == 3 else None
+                    msg = WindowsV4Properties(**m.__dict__)
+                    msg.sender = n
+                    msg.message_content_data = ZstandardUtils.convert_zstandard(m.message_content)
+                    msg.source_data = ZstandardUtils.convert_zstandard(m.source)
+                    msg.compress_content_data = ZstandardUtils.convert_zstandard(m.compress_content)
+                    self._append_media_info(filter_obj.username, msg, m.packed_info_data, msg.message_content_data)
+
+                    return Msg(windows_v4_properties=msg)
 
         if target_msg is None:
             logger.info("未找到匹配消息，无法写出 packed_info_data")

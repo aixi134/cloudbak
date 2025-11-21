@@ -12,11 +12,11 @@ import {
 import { getContactHeadById } from "@/utils/contact.js";
 import { parseMsg } from "@/utils/message_parser_v4.js";
 import { get_msg_desc } from "@/utils/msgtp_v4.js";
-import { msgBySvrId, singleMsg } from "@/api/msg.js";
+import { msgBySvrId } from "@/api/msg.js";
 import { toBase64 } from "js-base64";
 
 import { useStore } from "vuex";
-import { computed, reactive, toRaw } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { getContactById, getContactName } from "../../utils/contact.js";
 import MsgTextWithEmoji from "../MsgTextWithEmoji.vue";
 
@@ -30,6 +30,7 @@ const APP_MESSAGE_TYPES = new Set([
   17179869233, 21474836529, 12884901937, 4294967345, 292057776177, 326417514545,
   141733920817, 154618822705, 103079215153,
 ]);
+
 
 const props = defineProps({
   roomId: {
@@ -57,6 +58,7 @@ const previewState = reactive({
   visible: false,
   url: "",
 });
+const referPreview = ref(null);
 const referTypeText = {
   1: "[文本]",
   3: "[图片]",
@@ -127,16 +129,6 @@ const download = (path) => {
     link.click();
     // 移除<a>元素
     document.body.removeChild(link);
-  }
-};
-
-const getOriMsgBySvrId = (svrId, DbNo) => {
-  let msg = chatMapBySvrId[svrId];
-  // 本地不存在，则到服务端查找
-  if (!msg) {
-    singleMsg(props.roomId, svrId).then((data) => {
-      chatMapBySvrId[svrId] = data;
-    });
   }
 };
 
@@ -286,19 +278,6 @@ const getImageMediaSrc = (media, original = false) => {
   return buildRelativeResourceUrl(relative);
 };
 
-const getImageDisplaySrc = (original = false) => {
-  if (props.msg.media) {
-    return getImageMediaSrc(props.msg.media, original);
-  }
-  if (props.msg._image) {
-    const url = original
-      ? props.msg._image.originUrl || props.msg._image.thumbUrl
-      : props.msg._image.thumbUrl;
-    return getImageUrl(url);
-  }
-  return undefined;
-};
-
 const openImageOriginal = () => {
   const url = getImageDisplaySrc(true);
   if (url) {
@@ -311,6 +290,141 @@ const closePreview = () => {
   previewState.visible = false;
   previewState.url = "";
 };
+
+// 统一处理 svr_id，兼容字符串/数字/XML 节点
+const normalizeSvrId = (svrid) => {
+  if (svrid === undefined || svrid === null) return "";
+  if (typeof svrid === "string" || typeof svrid === "number") {
+    return String(svrid);
+  }
+  if (typeof svrid === "object") {
+    if ("#text" in svrid) return String(svrid["#text"]);
+    if ("text" in svrid) return String(svrid.text);
+    if ("value" in svrid) return String(svrid.value);
+  }
+  return String(svrid);
+};
+
+// 获取当前消息所在的数据库编号，兼容不同字段命名
+const resolveDbNo = (message = props.msg) => {
+  return (
+    message?.DbNo ??
+    message?.db_no ??
+    message?.dbNo ??
+    message?.db ??
+    ""
+  );
+};
+
+// 兼容引用与当前消息的图片展示
+const getImageDisplaySrc = (original = false, message = props.msg) => {
+  if (message?.media) {
+    return getImageMediaSrc(message.media, original);
+  }
+  if (message?._image) {
+    const url = original
+      ? message._image.originUrl || message._image.thumbUrl
+      : message._image.thumbUrl;
+    return getImageUrl(url);
+  }
+  if (message?._emoji?.url) {
+    return getImageUrl(message._emoji.url);
+  }
+  return undefined;
+};
+
+const getMessageVideoSource = (message) => {
+  if (!message) {
+    return { src: undefined, poster: undefined };
+  }
+  if (message.media?.source) {
+    return {
+      src: buildRelativeResourceUrl(message.media.source, "video"),
+      poster: buildRelativeResourceUrl(message.media.thumb || message.media.source),
+    };
+  }
+  const md5 = message._video?.msg?.videomsg?.["@attributes"]?.md5;
+  if (md5) {
+    const sessionId = store.getters.getCurrentSessionId;
+    return {
+      src: `/api/resources-v4/video/${sessionId}/${md5}`,
+      poster: `/api/resources-v4/video-poster/${sessionId}/${md5}`,
+    };
+  }
+  return { src: undefined, poster: undefined };
+};
+
+const getVoiceSrc = (message) => {
+  const rawSvrId =
+    message?.server_id || message?.svrid || props.msg._quote?.refer?.svrid;
+  const svrId = normalizeSvrId(rawSvrId);
+  if (!svrId) {
+    return "";
+  }
+  return `/api/resources-v4/media?strUsrName=${props.roomId}&MsgSvrID=${svrId}&session_id=${store.getters.getCurrentSessionId}`;
+};
+
+const referImageSrc = computed(() =>
+  getImageDisplaySrc(false, referPreview.value)
+);
+const referImageOriginSrc = computed(() =>
+  getImageDisplaySrc(true, referPreview.value)
+);
+const referVideoSource = computed(() => getMessageVideoSource(referPreview.value));
+const referVoiceSrc = computed(() => getVoiceSrc(referPreview.value));
+const referTypeIsMedia = computed(() => {
+  const typeKey = normalizeReferType(props.msg._quote?.refer?.type);
+  if (!typeKey) return false;
+  return (
+    typeKey === "3" ||
+    typeKey === "43" ||
+    typeKey === "34" ||
+    typeKey === String(ANIMATED_EMOJI_TYPE)
+  );
+});
+const referHasRichPreview = computed(() => {
+  const preview = referPreview.value;
+  if (!preview) return false;
+  if (preview.local_type === 3 && referImageSrc.value) return true;
+  if (preview.local_type === 43 && referVideoSource.value.src) return true;
+  if (preview.local_type === 34 && referVoiceSrc.value) return true;
+  if (preview.local_type === ANIMATED_EMOJI_TYPE && referImageSrc.value) return true;
+  return false;
+});
+
+const loadReferPreview = async () => {
+  const refer = props.msg._quote?.refer;
+  const svrId = normalizeSvrId(refer?.svrid);
+  if (!svrId || !props.roomId) {
+    referPreview.value = null;
+    return;
+  }
+  if (chatMapBySvrId[svrId]) {
+    referPreview.value = chatMapBySvrId[svrId];
+    return;
+  }
+  try {
+    const dbNo = resolveDbNo();
+    const data = await msgBySvrId(props.roomId, svrId, dbNo);
+    if (data.windows_v4_properties) {
+
+      parseMsg(data.windows_v4_properties, resolveCurrentWxId());
+      chatMapBySvrId[svrId] = data.windows_v4_properties;
+      referPreview.value = data.windows_v4_properties;
+    }
+  } catch (error) {
+    console.warn("[MsgHeadTemplate] 获取引用原消息失败", svrId, error);
+  }
+};
+
+watch(
+  () => normalizeSvrId(props.msg._quote?.refer?.svrid),
+  () => {
+    referPreview.value = null;
+    loadReferPreview();
+  },
+  { immediate: true }
+);
 
 const isAppMessage = (type) => {
   return APP_MESSAGE_TYPES.has(type);
@@ -343,6 +457,7 @@ const looksLikeStructuredPayload = (text) => {
   return false;
 };
 
+// 用下面替换 normalizeReferType / referContent（文件中部，约 340 行附近），并保留 looksLikeStructuredPayload
 const normalizeReferType = (type) => {
   if (type === undefined || type === null) return "";
   if (typeof type === "object") {
@@ -367,16 +482,17 @@ const referContent = (refer) => {
       if (rest) contentText = rest;
     }
     if (!looksLikeStructuredPayload(contentText)) {
+      console.log("[refer] contentText", contentText);
       return `${displayPrefix}${contentText}`.trim();
     }
   }
 
   const typeKey = normalizeReferType(refer.type);
+  console.log("[refer] typeKey", typeKey, "refer", refer);
   const typeLabel = referTypeText[typeKey] || REFER_DEFAULT_TEXT;
-  return refer.displayname
-    ? `${refer.displayname} ${typeLabel}`.trim()
-    : typeLabel;
+  return refer.displayname ? `${refer.displayname} ${typeLabel}`.trim() : typeLabel;
 };
+
 
 const miniProgramLink = () => {
   if (!props.msg._appmsg) {
@@ -399,7 +515,7 @@ const getEmojiSrc = () => {
 };
 
 const gotoReference = () => {
-  const svrId = props.msg._quote?.refer?.svrid;
+  const svrId = normalizeSvrId(props.msg._quote?.refer?.svrid);
   if (svrId) {
     emit("goto-msg", svrId);
   }
@@ -492,17 +608,59 @@ const chatInfoStyle = computed(() => ({
       </div>
       <!-- 引用消息 -->
       <div class="chat-text" v-else-if="props.msg.local_type === QUOTE_TYPE">
-        <p>WWW:{{ props.msg.data.content }}</p>
+        <p>{{ props.msg.data.content }}</p>
         <div
           class="refer-msg clickable"
           v-if="props.msg._quote?.refer"
           @click="gotoReference"
         >
-          <p class="refer-text">
-            WWW2:{{ referContent(props.msg._quote.refer) }}
+          <p class="refer-text" v-if="!referHasRichPreview && !referTypeIsMedia">
+            {{ referContent(props.msg._quote.refer) }}
           </p>
+
+          <template v-if="referPreview">
+            <div
+              class="refer-img"
+              v-if="referPreview.local_type === 3 && referImageSrc"
+            >
+              <img
+                class="exclude"
+                :src="referImageSrc"
+                :data-original="referImageOriginSrc"
+                alt="引用图片"
+              />
+            </div>
+            <div
+              class="refer-video"
+              v-else-if="referPreview.local_type === 43 && referVideoSource.src"
+            >
+              <video controls width="220" :poster="referVideoSource.poster">
+                <source :src="referVideoSource.src" type="video/mp4" />
+              </video>
+            </div>
+            <div
+              class="refer-voice"
+              v-else-if="referPreview.local_type === 34 && referVoiceSrc"
+            >
+              <AudioPlayer
+                :src="referVoiceSrc"
+                :text="referPreview.message_content_data || referPreview.data?.content"
+                :right="isSelf"
+              />
+            </div>
+            <div
+              class="refer-img"
+              v-else-if="referPreview.local_type === ANIMATED_EMOJI_TYPE && referImageSrc"
+            >
+              <img class="exclude" :src="referImageSrc" alt="引用表情" />
+            </div>
+            <p class="refer-text" v-else-if="referPreview.data?.content">
+              {{ referPreview.data.content }}
+            </p>
+          </template>
         </div>
       </div>
+
       <!-- 红包 -->
       <div
         class="chat-redpacket"

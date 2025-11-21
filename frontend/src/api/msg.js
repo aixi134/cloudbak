@@ -14,7 +14,7 @@ export const sessions = (page, size) => {
 };
 
 export const msgBySvrId = (username, svrId, DbNo) => {
-    return service.get(`/api/msg/msg_by_svr_id?svr_id=${svrId}&db_no=${DbNo}`);
+    return service.get(`/api/msg/msg_by_svr_id?v3_msg_svr_id=${svrId}&db_no=${DbNo}&username=${username}`);
 };
 
 export const singleMsg = (username, v3_msg_svr_id) => {
