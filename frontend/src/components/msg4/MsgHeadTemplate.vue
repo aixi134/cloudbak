@@ -60,12 +60,33 @@ const previewState = reactive({
   url: ''
 });
 const referTypeText = {
-  '1': '[文本]',
-  '3': '[图片]',
-  '34': '[语音]',
-  '43': '[视频]',
-  '49': '[文件]'
+
+  '1': '[\u6587\u672c]',
+
+  '3': '[\u56fe\u7247]',
+
+  '34': '[\u8bed\u97f3]',
+
+  '43': '[\u89c6\u9891]',
+
+  '47': '[\u8868\u60c5]',
+
+  '48': '[\u4f4d\u7f6e]',
+
+  '49': '[\u6587\u4ef6]',
+
+  '50': '[\u901a\u8bdd]',
+
+  '2000': '[\u8f6c\u8d26]',
+
+  '2001': '[\u7ea2\u5305]',
+
+  '2002': '[\u6536\u6b3e]'
+
 };
+
+const REFER_DEFAULT_TEXT = '[引用消息]';
+
 
 /**
  * 设置默认图片
@@ -298,18 +319,56 @@ const isAppMessage = (type) => {
   return APP_MESSAGE_TYPES.has(type);
 };
 
+const looksLikeStructuredPayload = (text) => {
+  if (!text) {
+    return false;
+  }
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (/^(\{|\[|<|&lt;)/.test(trimmed)) {
+    return true;
+  }
+  if (trimmed.includes('<msg') || trimmed.length > 160) {
+    return true;
+  }
+  const firstLine = trimmed.split(/\s+/)[0];
+  if (/^(wxid_|wx_)/i.test(firstLine) && trimmed.length <= 200) {
+    return true;
+  }
+  if (trimmed.includes('\n') && /^(wxid_|wx_)/i.test((trimmed.split('\n')[0] || '').trim())) {
+    return true;
+  }
+  return false;
+};
+
 const referContent = (refer) => {
   if (!refer) {
     return '';
   }
-  if (refer.contentText) {
-    return refer.displayname ? `${refer.displayname}: ${refer.contentText}` : refer.contentText;
+  const contentText = refer.contentText?.trim();
+  const displayPrefix = refer.displayname ? `${refer.displayname}: ` : '';
+  console.log("displayPrefix", displayPrefix)
+  if (contentText) {
+    const lines = contentText.split('\n');
+    if (lines.length > 1 && /^(wxid_|wx_)/i.test((lines[0] || '').trim())) {
+      const rest = lines.slice(1).join('\n').trim();
+      if (rest && !looksLikeStructuredPayload(rest)) {
+        return `${displayPrefix}${rest}`.trim();
+      }
+    }
+    if (!looksLikeStructuredPayload(contentText)) {
+      return `${displayPrefix}${contentText}`.trim();
+    }
   }
-  if (refer.type && referTypeText[refer.type]) {
-    return `${refer.displayname || ''} ${referTypeText[refer.type]}`.trim();
+  const typeLabel = referTypeText[String(refer.type)] || REFER_DEFAULT_TEXT;
+  if (refer.displayname) {
+    return `${refer.displayname} ${typeLabel}`.trim();
   }
-  return `${refer.displayname || ''} ${refer.content || ''}`.trim();
+  return typeLabel;
 };
+
 
 const miniProgramLink = () => {
   if (!props.msg._appmsg) {
@@ -400,11 +459,11 @@ const chatInfoStyle = computed(() => ({
       <!-- 引用消息 -->
       <div class="chat-text" v-else-if="props.msg.local_type === QUOTE_TYPE">
         <p>
-          {{ props.msg.data.content }}
+          WWW:{{ props.msg.data.content }}
         </p>
         <div class="refer-msg clickable" v-if="props.msg._quote?.refer" @click="gotoReference">
           <p class="refer-text">
-            {{ referContent(props.msg._quote.refer) }}
+            WWW2:{{ referContent(props.msg._quote.refer) }}
           </p>
         </div>
       </div>
@@ -815,6 +874,10 @@ const chatInfoStyle = computed(() => ({
   }
 }
 </style>
+
+
+
+
 
 
 

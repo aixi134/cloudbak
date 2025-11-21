@@ -16,23 +16,42 @@ const ANIMATED_EMOJI_TYPE = 47;
 const RED_ENVELOPE_TYPE = 8594229559345;
 const PAT_TYPE = 266287972401;
 
+const stripWxPrefix = (text) => {
+    if (!text) {
+        return text;
+    }
+    const sepIndex = text.indexOf(':\n');
+    if (sepIndex !== -1) {
+        const prefix = text.slice(0, sepIndex).trim();
+        if (/^(wxid_|wx_)/i.test(prefix)) {
+            return text.slice(sepIndex + 2);
+        }
+    }
+    return text;
+};
+
 const parseText = (msg, wx_id) => {
-    let data = msg.message_content_data;
-    if (data.indexOf(":\n") !== -1) {
-        let array = data.split(":\n");
+    const data = msg.message_content_data || '';
+    const sepIndex = data.indexOf(':\n');
+    if (sepIndex !== -1) {
+        const sender = data.slice(0, sepIndex).trim();
+        const content = data.slice(sepIndex + 2).trimStart();
         return {
-            sender: array[0],
-            content: array[1]
+            sender: sender || wx_id,
+            content
         }
-    } else {
-        return {
-            sender: wx_id,
-            content: data
-        }
+    }
+    return {
+        sender: wx_id,
+        content: data
     }
 }
 
 export const parseMsg = (msg, wx_id) => {
+    // 去掉前缀 wxid_xxx:\n，确保 XML 可被解析
+    if (msg.message_content_data) {
+        msg.message_content_data = stripWxPrefix(msg.message_content_data);
+    }
     msg['data'] = parseText(msg, wx_id);
     if (msg.message_content_data) {
         try {
