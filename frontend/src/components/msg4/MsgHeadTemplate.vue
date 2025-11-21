@@ -1,92 +1,78 @@
 ﻿<script setup>
-import defaultImage from '@/assets/default-head.svg';
+import defaultImage from "@/assets/default-head.svg";
 import AudioPlayer from "../AudioPlayer.vue";
-import unknownFile from '@/assets/filetypeicon/unknown.svg';
-import cleanedImage from '@/assets/img-cleaned.png';
-import {getThumbFromStringContent, fileSize, getReferFileName, fromXmlToJson} from "@/utils/common.js";
-import {getContactHeadById} from "@/utils/contact.js";
-import {parseMsg} from "@/utils/message_parser_v4.js";
-import {get_msg_desc} from "@/utils/msgtp_v4.js";
-import {msgBySvrId, singleMsg} from "@/api/msg.js"
-import {toBase64} from "js-base64";
+import unknownFile from "@/assets/filetypeicon/unknown.svg";
+import cleanedImage from "@/assets/img-cleaned.png";
+import {
+  getThumbFromStringContent,
+  fileSize,
+  getReferFileName,
+  fromXmlToJson,
+} from "@/utils/common.js";
+import { getContactHeadById } from "@/utils/contact.js";
+import { parseMsg } from "@/utils/message_parser_v4.js";
+import { get_msg_desc } from "@/utils/msgtp_v4.js";
+import { msgBySvrId, singleMsg } from "@/api/msg.js";
+import { toBase64 } from "js-base64";
 
-import {useStore} from "vuex";
-import {computed, reactive} from "vue";
-import {getContactById, getContactName} from "../../utils/contact.js";
+import { useStore } from "vuex";
+import { computed, reactive, toRaw } from "vue";
+import { getContactById, getContactName } from "../../utils/contact.js";
 import MsgTextWithEmoji from "../MsgTextWithEmoji.vue";
 
 const store = useStore();
-const emit = defineEmits(['goto-msg']);
+const emit = defineEmits(["goto-msg"]);
 const QUOTE_TYPE = 244813135921;
 const RED_ENVELOPE_TYPE = 8594229559345;
 const PAT_TYPE = 266287972401;
 const ANIMATED_EMOJI_TYPE = 47;
 const APP_MESSAGE_TYPES = new Set([
-  17179869233,
-  21474836529,
-  12884901937,
-  4294967345,
-  292057776177,
-  326417514545,
-  141733920817,
-  154618822705,
-  103079215153
+  17179869233, 21474836529, 12884901937, 4294967345, 292057776177, 326417514545,
+  141733920817, 154618822705, 103079215153,
 ]);
 
 const props = defineProps({
   roomId: {
-    type: String
+    type: String,
   },
   msg: {
     type: Object,
-    required: true
+    required: true,
   },
   chatRoomNameMap: {
-    type: Object
+    type: Object,
   },
   isChatRoom: {
     type: Boolean,
-    default: false
+    default: false,
   },
   dialogMode: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 });
 
 const chatMapBySvrId = reactive({});
 const previewState = reactive({
   visible: false,
-  url: ''
+  url: "",
 });
 const referTypeText = {
-
-  '1': '[\u6587\u672c]',
-
-  '3': '[\u56fe\u7247]',
-
-  '34': '[\u8bed\u97f3]',
-
-  '43': '[\u89c6\u9891]',
-
-  '47': '[\u8868\u60c5]',
-
-  '48': '[\u4f4d\u7f6e]',
-
-  '49': '[\u6587\u4ef6]',
-
-  '50': '[\u901a\u8bdd]',
-
-  '2000': '[\u8f6c\u8d26]',
-
-  '2001': '[\u7ea2\u5305]',
-
-  '2002': '[\u6536\u6b3e]'
-
+  1: "[文本]",
+  3: "[图片]",
+  34: "[语音]",
+  43: "[视频]",
+  47: "[表情]",
+  48: "[位置]",
+  49: "[文件]",
+  50: "[通话]",
+  2000: "[转账]",
+  2001: "[红包]",
+  2002: "[收款]",
 };
 
-const REFER_DEFAULT_TEXT = '[引用消息]';
 
+const REFER_DEFAULT_TEXT = "[引用消息]";
 
 /**
  * 设置默认图片
@@ -94,7 +80,7 @@ const REFER_DEFAULT_TEXT = '[引用消息]';
  */
 const setDefaultImage = (event) => {
   event.target.src = defaultImage;
-}
+};
 /**
  * 有备注先用备注，其次群备注，最后昵称
  * @param username
@@ -109,28 +95,30 @@ const displayName = (username) => {
   if (member) {
     return member.remark ? member.remark : member.nickname;
   }
-  return '未知用户';
-}
+  return "未知用户";
+};
 
 const headImage = (username) => {
   const contact = getContactById(username);
   if (contact) {
     return contact.small_head_url;
   }
-  const member = props.chatRoomNameMap[username]
+  const member = props.chatRoomNameMap[username];
   if (member) {
     return member.small_head_img;
   }
   return defaultImage;
-}
+};
 
 const download = (path) => {
   if (path) {
-    path = path.replace('\\', '/');
-    const fileName = path.split('/').pop();
+    path = path.replace("\\", "/");
+    const fileName = path.split("/").pop();
     let sessionId = store.getters.getCurrentSessionId;
-    let url = `/api/resources/?path=${encodeURIComponent(path)}&session_id=${sessionId}`;
-    const link = document.createElement('a');
+    let url = `/api/resources/?path=${encodeURIComponent(
+      path
+    )}&session_id=${sessionId}`;
+    const link = document.createElement("a");
     link.href = url;
     link.download = fileName;
     // 将<a>元素添加到DOM
@@ -140,13 +128,13 @@ const download = (path) => {
     // 移除<a>元素
     document.body.removeChild(link);
   }
-}
+};
 
 const getOriMsgBySvrId = (svrId, DbNo) => {
   let msg = chatMapBySvrId[svrId];
   // 本地不存在，则到服务端查找
   if (!msg) {
-    singleMsg(props.roomId, svrId).then(data => {
+    singleMsg(props.roomId, svrId).then((data) => {
       chatMapBySvrId[svrId] = data;
     });
   }
@@ -158,7 +146,7 @@ if (props.msg.Type === 49 && props.msg.SubType === 19) {
 
 // 图片代理判断
 const getImageUrl = (url) => {
-  if (url && typeof url === 'string') {
+  if (url && typeof url === "string") {
     if (url.startsWith("/")) {
       return url;
     }
@@ -169,58 +157,63 @@ const getImageUrl = (url) => {
     }
   }
   return defaultImage;
-}
+};
 
 const resolveCurrentWxId = () => {
   const rawGetter = store.getters?.getCurrentWxId;
   let currentWxId;
-  if (typeof rawGetter === 'function') {
+  if (typeof rawGetter === "function") {
     try {
       currentWxId = rawGetter();
     } catch (error) {
-      console.warn('[MsgHeadTemplate] 读取当前微信 ID 失败', error);
+      console.warn("[MsgHeadTemplate] 读取当前微信 ID 失败", error);
     }
   } else {
     currentWxId = rawGetter;
   }
-  if (currentWxId && typeof currentWxId === 'object') {
-    currentWxId = currentWxId.wxid
-      || currentWxId.wx_id
-      || currentWxId.wxId
-      || currentWxId.id
-      || currentWxId.username;
+  if (currentWxId && typeof currentWxId === "object") {
+    currentWxId =
+      currentWxId.wxid ||
+      currentWxId.wx_id ||
+      currentWxId.wxId ||
+      currentWxId.id ||
+      currentWxId.username;
   }
-  return typeof currentWxId === 'string' ? currentWxId : '';
+  return typeof currentWxId === "string" ? currentWxId : "";
 };
 
 const normalizeWxId = (value) => {
   if (!value) {
-    return '';
+    return "";
   }
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     return value;
   }
-  if (typeof value === 'object') {
-    return value.user_name
-      || value.username
-      || value.wxid
-      || value.wx_id
-      || value.wxId
-      || value.strUsrName
-      || value.id
-      || '';
+  if (typeof value === "object") {
+    return (
+      value.user_name ||
+      value.username ||
+      value.wxid ||
+      value.wx_id ||
+      value.wxId ||
+      value.strUsrName ||
+      value.id ||
+      ""
+    );
   }
-  return '';
+  return "";
 };
 
 const resolveMessageSender = (msg) => {
   if (!msg) {
-    return '';
+    return "";
   }
-  return normalizeWxId(msg.sender)
-    || normalizeWxId(msg.fromusername)
-    || normalizeWxId(msg.data?.sender)
-    || normalizeWxId(msg.data?.fromusername);
+  return (
+    normalizeWxId(msg.sender) ||
+    normalizeWxId(msg.fromusername) ||
+    normalizeWxId(msg.data?.sender) ||
+    normalizeWxId(msg.data?.fromusername)
+  );
 };
 
 // 判断消息是否来自当前用户
@@ -257,28 +250,30 @@ const isSelf = computed(() => {
   // });
   return !result;
 });
-parseMsg(props.msg, resolveCurrentWxId())
+parseMsg(props.msg, resolveCurrentWxId());
 
-
-const buildRelativeResourceUrl = (relativePath, resourceType = 'image') => {
+const buildRelativeResourceUrl = (relativePath, resourceType = "image") => {
   if (!relativePath) {
     return undefined;
   }
   // 兼容后端直接返回 base64 内容（无 data: 前缀）
-  if (typeof relativePath === 'string') {
-    if (relativePath.startsWith('data:')) {
+  if (typeof relativePath === "string") {
+    if (relativePath.startsWith("data:")) {
       return relativePath;
     }
-    const isRawBase64 = /^[A-Za-z0-9+/]+={0,2}$/.test(relativePath) && relativePath.length > 100;
+    const isRawBase64 =
+      /^[A-Za-z0-9+/]+={0,2}$/.test(relativePath) && relativePath.length > 100;
     if (isRawBase64) {
-      const mime = resourceType === 'video' ? 'video/mp4' : 'image/jpeg';
+      const mime = resourceType === "video" ? "video/mp4" : "image/jpeg";
       return `data:${mime};base64,${relativePath}`;
     }
   }
   const sessionId = store.getters.getCurrentSessionId;
-  let url = `/api/resources-v4/relative-resource?relative_path=${encodeURIComponent(relativePath)}&session_id=${sessionId}`;
-  if (resourceType === 'video') {
-    url += '&resource_type=video';
+  let url = `/api/resources-v4/relative-resource?relative_path=${encodeURIComponent(
+    relativePath
+  )}&session_id=${sessionId}`;
+  if (resourceType === "video") {
+    url += "&resource_type=video";
   }
   return url;
 };
@@ -287,7 +282,7 @@ const getImageMediaSrc = (media, original = false) => {
   if (!media) {
     return undefined;
   }
-  const relative = original ? media.source : (media.thumb || media.source);
+  const relative = original ? media.source : media.thumb || media.source;
   return buildRelativeResourceUrl(relative);
 };
 
@@ -296,7 +291,9 @@ const getImageDisplaySrc = (original = false) => {
     return getImageMediaSrc(props.msg.media, original);
   }
   if (props.msg._image) {
-    const url = original ? (props.msg._image.originUrl || props.msg._image.thumbUrl) : props.msg._image.thumbUrl;
+    const url = original
+      ? props.msg._image.originUrl || props.msg._image.thumbUrl
+      : props.msg._image.thumbUrl;
     return getImageUrl(url);
   }
   return undefined;
@@ -312,7 +309,7 @@ const openImageOriginal = () => {
 
 const closePreview = () => {
   previewState.visible = false;
-  previewState.url = '';
+  previewState.url = "";
 };
 
 const isAppMessage = (type) => {
@@ -330,61 +327,72 @@ const looksLikeStructuredPayload = (text) => {
   if (/^(\{|\[|<|&lt;)/.test(trimmed)) {
     return true;
   }
-  if (trimmed.includes('<msg') || trimmed.length > 160) {
+  if (trimmed.includes("<msg") || trimmed.length > 160) {
     return true;
   }
   const firstLine = trimmed.split(/\s+/)[0];
   if (/^(wxid_|wx_)/i.test(firstLine) && trimmed.length <= 200) {
     return true;
   }
-  if (trimmed.includes('\n') && /^(wxid_|wx_)/i.test((trimmed.split('\n')[0] || '').trim())) {
+  if (
+    trimmed.includes("\n") &&
+    /^(wxid_|wx_)/i.test((trimmed.split("\n")[0] || "").trim())
+  ) {
     return true;
   }
   return false;
 };
 
-const referContent = (refer) => {
-  if (!refer) {
-    return '';
+const normalizeReferType = (type) => {
+  if (type === undefined || type === null) return "";
+  if (typeof type === "object") {
+    if ("text" in type) return String(type.text);
+    if ("#text" in type) return String(type["#text"]);
+    if ("value" in type) return String(type.value);
+    if (Array.isArray(type) && type.length === 1) return normalizeReferType(type[0]);
   }
-  const contentText = refer.contentText?.trim();
-  const displayPrefix = refer.displayname ? `${refer.displayname}: ` : '';
-  console.log("displayPrefix", displayPrefix)
+  return String(type);
+};
+
+const referContent = (refer) => {
+  if (!refer) return "";
+  let contentText = refer.contentText?.trim();
+  const displayPrefix = refer.displayname ? `${refer.displayname}: ` : "";
+
+  // 去掉前缀 wxid_xxx:
   if (contentText) {
-    const lines = contentText.split('\n');
-    if (lines.length > 1 && /^(wxid_|wx_)/i.test((lines[0] || '').trim())) {
-      const rest = lines.slice(1).join('\n').trim();
-      if (rest && !looksLikeStructuredPayload(rest)) {
-        return `${displayPrefix}${rest}`.trim();
-      }
+    const lines = contentText.split("\n");
+    if (lines.length > 1 && /^(wxid_|wx_)/i.test((lines[0] || "").trim())) {
+      const rest = lines.slice(1).join("\n").trim();
+      if (rest) contentText = rest;
     }
     if (!looksLikeStructuredPayload(contentText)) {
       return `${displayPrefix}${contentText}`.trim();
     }
   }
-  const typeLabel = referTypeText[String(refer.type)] || REFER_DEFAULT_TEXT;
-  if (refer.displayname) {
-    return `${refer.displayname} ${typeLabel}`.trim();
-  }
-  return typeLabel;
-};
 
+  const typeKey = normalizeReferType(refer.type);
+  const typeLabel = referTypeText[typeKey] || REFER_DEFAULT_TEXT;
+  return refer.displayname
+    ? `${refer.displayname} ${typeLabel}`.trim()
+    : typeLabel;
+};
 
 const miniProgramLink = () => {
   if (!props.msg._appmsg) {
-    return 'javascript:void(0)';
+    return "javascript:void(0)";
   }
   if (props.msg._appmsg.url) {
     return props.msg._appmsg.url;
   }
-  return 'javascript:void(0)';
+  return "javascript:void(0)";
 };
 
 const getEmojiSrc = () => {
   if (props.msg._emoji?.url) {
     return getImageUrl(props.msg._emoji.url);
   }
-  if (props.msg.media && props.msg.media.type === 'image') {
+  if (props.msg.media && props.msg.media.type === "image") {
     return getImageMediaSrc(props.msg.media);
   }
   return undefined;
@@ -393,90 +401,129 @@ const getEmojiSrc = () => {
 const gotoReference = () => {
   const svrId = props.msg._quote?.refer?.svrid;
   if (svrId) {
-    emit('goto-msg', svrId);
+    emit("goto-msg", svrId);
   }
 };
 
 const chatClasses = computed(() => ({
-  'chat-right': isSelf.value,
-  'chat-left': !isSelf.value,
+  "chat-right": isSelf.value,
+  "chat-left": !isSelf.value,
 }));
 
 const chatStyle = computed(() => ({
-  flexDirection: isSelf.value ? 'row-reverse' : 'row',
+  flexDirection: isSelf.value ? "row-reverse" : "row",
 }));
 
 const chatInfoStyle = computed(() => ({
-  alignItems: isSelf.value ? 'flex-end' : 'flex-start',
-  textAlign: isSelf.value ? 'right' : 'left',
+  alignItems: isSelf.value ? "flex-end" : "flex-start",
+  textAlign: isSelf.value ? "right" : "left",
 }));
-
 </script>
 
 <template>
   <div class="chat" :class="chatClasses" :style="chatStyle">
     <div class="chat-header">
-      <img :src="headImage(props.msg.sender)" @error="setDefaultImage" alt="" class="exclude"/>
+      <img
+        :src="headImage(props.msg.sender)"
+        @error="setDefaultImage"
+        alt=""
+        class="exclude"
+      />
     </div>
     <div class="chat-info" :style="chatInfoStyle">
       <div class="chat-nickname" v-if="props.isChatRoom">
-        <p v-if="props.isChatRoom"> {{ displayName(props.msg.sender) }} </p>
+        <p v-if="props.isChatRoom">{{ displayName(props.msg.sender) }}</p>
       </div>
       <!-- 文本消息 -->
       <div class="chat-text" v-if="props.msg.local_type === 1">
-        <msg-text-with-emoji :content="props.msg.data.content"/>
+        <msg-text-with-emoji :content="props.msg.data.content" />
       </div>
       <!-- 图片消息 -->
-      <div class="chat-img" v-else-if="getImageDisplaySrc()" @click="openImageOriginal">
-
+      <div
+        class="chat-img"
+        v-else-if="getImageDisplaySrc()"
+        @click="openImageOriginal"
+      >
         <img
-            class="exclude"
-            :src="getImageDisplaySrc()"
-            :data-original="getImageDisplaySrc(true)"
-            alt="图片"/>
+          class="exclude"
+          :src="getImageDisplaySrc()"
+          :data-original="getImageDisplaySrc(true)"
+          alt="图片"
+        />
       </div>
       <div class="chat-text" v-else-if="props.msg.local_type === 3">
         [图片消息暂无法加载]
       </div>
       <!-- 动画表情 -->
-      <div class="chat-emoji" v-else-if="props.msg.local_type === ANIMATED_EMOJI_TYPE">
-        <img v-if="getEmojiSrc()" class="exclude" :src="getEmojiSrc()" alt="表情"/>
-        <p class="emoji-desc" v-if="props.msg._emoji?.desc">{{ props.msg._emoji.desc }}</p>
+      <div
+        class="chat-emoji"
+        v-else-if="props.msg.local_type === ANIMATED_EMOJI_TYPE"
+      >
+        <img
+          v-if="getEmojiSrc()"
+          class="exclude"
+          :src="getEmojiSrc()"
+          alt="表情"
+        />
+        <p class="emoji-desc" v-if="props.msg._emoji?.desc">
+          {{ props.msg._emoji.desc }}
+        </p>
       </div>
-<!--       视频消息-->
+      <!--       视频消息-->
       <div v-else-if="props.msg.local_type === 43" class="chat-img exclude">
-        <video controls width="250" :poster="`/api/resources-v4/video-poster/${store.getters.getCurrentSessionId}/${props.msg._video?.msg.videomsg['@attributes']?.md5}`">
-          <source :src="`/api/resources-v4/video/${store.getters.getCurrentSessionId}/${props.msg._video?.msg.videomsg['@attributes']?.md5}`" type="video/mp4" />
+        <video
+          controls
+          width="250"
+          :poster="`/api/resources-v4/video-poster/${store.getters.getCurrentSessionId}/${props.msg._video?.msg.videomsg['@attributes']?.md5}`"
+        >
+          <source
+            :src="`/api/resources-v4/video/${store.getters.getCurrentSessionId}/${props.msg._video?.msg.videomsg['@attributes']?.md5}`"
+            type="video/mp4"
+          />
         </video>
       </div>
       <!-- 语音 -->
       <div v-else-if="props.msg.local_type === 34" class="chat-media">
         <AudioPlayer
-            :src="`/api/resources-v4/media?strUsrName=${props.roomId}&MsgSvrID=${props.msg.server_id}&session_id=${store.getters.getCurrentSessionId}`"
-            :text="props.msg.message_content_data || props.msg.data.content"
-            :right="isSelf"/>
+          :src="`/api/resources-v4/media?strUsrName=${props.roomId}&MsgSvrID=${props.msg.server_id}&session_id=${store.getters.getCurrentSessionId}`"
+          :text="props.msg.message_content_data || props.msg.data.content"
+          :right="isSelf"
+        />
       </div>
       <!-- 引用消息 -->
       <div class="chat-text" v-else-if="props.msg.local_type === QUOTE_TYPE">
-        <p>
-          WWW:{{ props.msg.data.content }}
-        </p>
-        <div class="refer-msg clickable" v-if="props.msg._quote?.refer" @click="gotoReference">
+        <p>WWW:{{ props.msg.data.content }}</p>
+        <div
+          class="refer-msg clickable"
+          v-if="props.msg._quote?.refer"
+          @click="gotoReference"
+        >
           <p class="refer-text">
             WWW2:{{ referContent(props.msg._quote.refer) }}
           </p>
         </div>
       </div>
       <!-- 红包 -->
-      <div class="chat-redpacket" v-else-if="props.msg.local_type === RED_ENVELOPE_TYPE">
+      <div
+        class="chat-redpacket"
+        v-else-if="props.msg.local_type === RED_ENVELOPE_TYPE"
+      >
         <div class="redpacket-left">
           <div class="redpacket-icon" v-if="props.msg._redEnvelope?.iconUrl">
-            <img class="exclude" :src="getImageUrl(props.msg._redEnvelope.iconUrl)" alt="红包"/>
+            <img
+              class="exclude"
+              :src="getImageUrl(props.msg._redEnvelope.iconUrl)"
+              alt="红包"
+            />
           </div>
-          <font-awesome-icon v-else class="redpacket-icon redpacket-icon-default" :icon="['fas', 'gift']"/>
+          <font-awesome-icon
+            v-else
+            class="redpacket-icon redpacket-icon-default"
+            :icon="['fas', 'gift']"
+          />
         </div>
         <div class="redpacket-body">
-          <p class="title">{{ props.msg._redEnvelope?.title || '微信红包' }}</p>
+          <p class="title">{{ props.msg._redEnvelope?.title || "微信红包" }}</p>
           <p class="desc">点击查看红包</p>
         </div>
         <div class="redpacket-footer">
@@ -485,39 +532,56 @@ const chatInfoStyle = computed(() => ({
       </div>
       <!-- 拍一拍-->
       <div class="chat-pat" v-else-if="props.msg.local_type === PAT_TYPE">
-        <p>{{ props.msg._pat?.title || props.msg._pat?.template || '拍了拍你' }}</p>
+        <p>
+          {{ props.msg._pat?.title || props.msg._pat?.template || "拍了拍你" }}
+        </p>
       </div>
       <!-- 小程序/卡片 -->
-      <a class="chat-appmsg"
-         v-else-if="isAppMessage(props.msg.local_type) && props.msg._appmsg"
-         :href="miniProgramLink()"
-         target="_blank"
-         rel="noreferrer">
+      <a
+        class="chat-appmsg"
+        v-else-if="isAppMessage(props.msg.local_type) && props.msg._appmsg"
+        :href="miniProgramLink()"
+        target="_blank"
+        rel="noreferrer"
+      >
         <div class="appmsg-cover" v-if="props.msg._appmsg.cover">
-          <img class="exclude" :src="getImageUrl(props.msg._appmsg.cover)" alt="cover"/>
+          <img
+            class="exclude"
+            :src="getImageUrl(props.msg._appmsg.cover)"
+            alt="cover"
+          />
         </div>
         <div class="appmsg-body">
           <p class="appmsg-title">{{ props.msg._appmsg.title }}</p>
           <p class="appmsg-desc">{{ props.msg._appmsg.desc }}</p>
-          <p class="appmsg-app">{{ props.msg._appmsg.appname || props.msg._appmsg.sourcedisplayname }}</p>
+          <p class="appmsg-app">
+            {{
+              props.msg._appmsg.appname || props.msg._appmsg.sourcedisplayname
+            }}
+          </p>
         </div>
       </a>
       <!-- 语音 / 视频通话 -->
       <div class="chat-phone" v-else-if="props.msg.local_type === 50">
-        <font-awesome-icon class="icon-file" :icon="['fas', props.msg._voip?.mode === 'video' ? 'video' : 'phone']" title="通话"/>
-        {{ props.msg._voip?.text || '[通话记录]' }}
+        <font-awesome-icon
+          class="icon-file"
+          :icon="['fas', props.msg._voip?.mode === 'video' ? 'video' : 'phone']"
+          title="通话"
+        />
+        {{ props.msg._voip?.text || "[通话记录]" }}
       </div>
       <div class="chat-text" v-else>
-        <p>
-          [不支持的消息类型: {{get_msg_desc(props.msg.local_type)}}]
-        </p>
+        <p>[不支持的消息类型: {{ get_msg_desc(props.msg.local_type) }}]</p>
       </div>
-
     </div>
   </div>
 
   <Teleport to="body">
-    <div v-if="previewState.visible" class="image-preview-mask" @click="closePreview">
+    <div
+      v-if="previewState.visible"
+      class="image-preview-mask"
+      @click="closePreview"
+    >
       <img :src="previewState.url" alt="preview" @click.stop />
     </div>
   </Teleport>
@@ -547,7 +611,7 @@ const chatInfoStyle = computed(() => ({
     padding-right: 0.714rem;
     .chat-nickname {
       font-size: 0.857rem;
-      color: #BEBEBE;
+      color: #bebebe;
       text-align: left;
     }
     .chat-text {
@@ -562,7 +626,7 @@ const chatInfoStyle = computed(() => ({
       max-width: 28.571rem;
     }
     .chat-text:hover {
-      background-color: #EBEBEB;
+      background-color: #ebebeb;
     }
     .chat-img {
       direction: ltr;
@@ -576,7 +640,6 @@ const chatInfoStyle = computed(() => ({
       cursor: pointer;
     }
     .chat-media {
-
     }
     .refer-msg {
       margin-top: 0.357rem;
@@ -584,7 +647,7 @@ const chatInfoStyle = computed(() => ({
       .refer-text {
         direction: ltr;
         font-size: 0.857rem;
-        background-color: #E8E8E8;
+        background-color: #e8e8e8;
         color: #797979;
         padding: 0.357rem;
         border-radius: 0.214rem;
@@ -599,7 +662,7 @@ const chatInfoStyle = computed(() => ({
       }
       .refer-img {
         font-size: 0.857rem;
-        background-color: #E8E8E8;
+        background-color: #e8e8e8;
         color: #797979;
         padding: 0.357rem 0.714rem;
         border-radius: 0.214rem;
@@ -609,7 +672,7 @@ const chatInfoStyle = computed(() => ({
     }
     .chat-file {
       height: 8.343rem;
-      background-color: #FFFFFF;
+      background-color: #ffffff;
       border-radius: 0.357rem;
       .chat-file-top {
         height: 5.357rem;
@@ -652,9 +715,9 @@ const chatInfoStyle = computed(() => ({
       cursor: pointer;
     }
     .chat-phone {
-      background-color: #FFFFFF;
+      background-color: #ffffff;
       border-radius: 3px;
-      padding:5px 10px;
+      padding: 5px 10px;
     }
   }
 }
@@ -671,7 +734,7 @@ const chatInfoStyle = computed(() => ({
     }
     .chat-text {
       text-align: left;
-      background-color: #FFFFFF;
+      background-color: #ffffff;
     }
     .chat-media {
       direction: ltr;
@@ -707,7 +770,7 @@ const chatInfoStyle = computed(() => ({
 }
 .chat.chat-right .chat-info:hover {
   .chat-text {
-    background-color: #89D961;
+    background-color: #89d961;
   }
 }
 .chat.chat-left .chat-info:hover {
@@ -819,8 +882,8 @@ const chatInfoStyle = computed(() => ({
   display: block;
   width: 18.571rem;
   padding: 0.714rem;
-  background-color: #FFFFFF;
-  border: 1px solid #EDEDED;
+  background-color: #ffffff;
+  border: 1px solid #ededed;
   border-radius: 0.357rem;
   color: #232323;
   text-decoration: none;
@@ -874,13 +937,3 @@ const chatInfoStyle = computed(() => ({
   }
 }
 </style>
-
-
-
-
-
-
-
-
-
-
