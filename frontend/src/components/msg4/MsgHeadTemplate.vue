@@ -26,6 +26,8 @@ const QUOTE_TYPE = 244813135921;
 const RED_ENVELOPE_TYPE = 8594229559345;
 const PAT_TYPE = 266287972401;
 const ANIMATED_EMOJI_TYPE = 47;
+const LOCATION_TYPE = 48;
+const MERGED_MESSAGE_TYPE = 81604378673;
 const APP_MESSAGE_TYPES = new Set([
   17179869233, 21474836529, 12884901937, 4294967345, 292057776177, 326417514545,
   141733920817, 154618822705, 103079215153,
@@ -372,6 +374,8 @@ const referImageOriginSrc = computed(() =>
 );
 const referVideoSource = computed(() => getMessageVideoSource(referPreview.value));
 const referVoiceSrc = computed(() => getVoiceSrc(referPreview.value));
+const locationInfo = computed(() => props.msg._location || {});
+const mergeInfo = computed(() => props.msg._merge || {});
 const referTypeIsMedia = computed(() => {
   const typeKey = normalizeReferType(props.msg._quote?.refer?.type);
   if (!typeKey) return false;
@@ -585,6 +589,21 @@ const chatInfoStyle = computed(() => ({
           {{ props.msg._emoji.desc }}
         </p>
       </div>
+      <div v-else-if="props.msg.local_type === LOCATION_TYPE" class="chat-location">
+        <div class="location-icon">📍</div>
+        <div class="location-body">
+          <p class="location-title">
+            {{ locationInfo.poiname || locationInfo.label || "位置共享" }}
+          </p>
+          <p class="location-desc" v-if="locationInfo.label">
+            {{ locationInfo.label }}
+          </p>
+          <p class="location-desc coords" v-if="locationInfo.x && locationInfo.y">
+            {{ locationInfo.x }}, {{ locationInfo.y }}
+            <span v-if="locationInfo.scale">· 缩放 {{ locationInfo.scale }}</span>
+          </p>
+        </div>
+      </div>
       <!--       视频消息-->
       <div v-else-if="props.msg.local_type === 43" class="chat-img exclude">
         <video
@@ -693,6 +712,14 @@ const chatInfoStyle = computed(() => ({
         <p>
           {{ props.msg._pat?.title || props.msg._pat?.template || "拍了拍你" }}
         </p>
+      </div>
+      <div
+        class="chat-merge"
+        v-else-if="props.msg.local_type === MERGED_MESSAGE_TYPE && mergeInfo"
+      >
+        <p class="merge-title">{{ mergeInfo.title || "聊天记录" }}</p>
+        <p class="merge-desc" v-if="mergeInfo.desc">{{ mergeInfo.desc }}</p>
+        <p class="merge-hint">点击查看原文</p>
       </div>
       <!-- 小程序/卡片 -->
       <a
@@ -937,25 +964,79 @@ const chatInfoStyle = computed(() => ({
   }
 }
 
-.chat-emoji {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  img {
-    max-width: 8rem;
-    max-height: 8rem;
-    width: auto;
-    height: auto;
-    object-fit: contain;
+  .chat-emoji {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    img {
+      max-width: 8rem;
+      max-height: 8rem;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+    }
+    .emoji-desc {
+      margin-top: 0.357rem;
+      font-size: 0.857rem;
+      color: #777;
+    }
   }
-  .emoji-desc {
-    margin-top: 0.357rem;
-    font-size: 0.857rem;
-    color: #777;
+  .chat-location {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    background-color: #ffffff;
+    border: 1px solid #ededed;
+    border-radius: 0.357rem;
+    padding: 0.571rem 0.714rem;
+    max-width: 18rem;
+    .location-icon {
+      color: #e64340;
+      font-size: 1.2rem;
+      margin-top: 0.1rem;
+    }
+    .location-body {
+      .location-title {
+        font-weight: 600;
+        margin: 0;
+      }
+      .location-desc {
+        margin: 0.1rem 0 0;
+        color: #6b6b6b;
+        font-size: 0.9rem;
+      }
+      .coords {
+        font-size: 0.786rem;
+        color: #9b9b9b;
+      }
+    }
   }
-}
 
-.chat-redpacket {
+  .chat-merge {
+    background-color: #ffffff;
+    border: 1px solid #ededed;
+    border-radius: 0.357rem;
+    padding: 0.714rem;
+    max-width: 18rem;
+    .merge-title {
+      font-weight: 600;
+      margin: 0;
+    }
+    .merge-desc {
+      margin: 0.3rem 0 0;
+      color: #777;
+      font-size: 0.9rem;
+      max-height: 3.6rem;
+      overflow: hidden;
+    }
+    .merge-hint {
+      margin: 0.4rem 0 0;
+      color: #a0a0a0;
+      font-size: 0.786rem;
+    }
+  }
+
+  .chat-redpacket {
   width: 16.429rem;
   border-radius: 0.571rem;
   padding: 0.714rem;

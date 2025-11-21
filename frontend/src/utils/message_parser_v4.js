@@ -13,7 +13,9 @@ const APP_MESSAGE_TYPES = [
     103079215153
 ];
 const ANIMATED_EMOJI_TYPE = 47;
+const LOCATION_TYPE = 48;
 const RED_ENVELOPE_TYPE = 8594229559345;
+const MERGED_MESSAGE_TYPE = 81604378673;
 const PAT_TYPE = 266287972401;
 
 const stripWxPrefix = (text) => {
@@ -83,6 +85,12 @@ export const parseMsg = (msg, wx_id) => {
     }
     if (msg.local_type === ANIMATED_EMOJI_TYPE) {
         enrichEmojiInfo(msg);
+    }
+    if (msg.local_type === LOCATION_TYPE) {
+        enrichLocationInfo(msg);
+    }
+    if (msg.local_type === MERGED_MESSAGE_TYPE) {
+        enrichMergedMessageInfo(msg);
     }
     if (msg.local_type === RED_ENVELOPE_TYPE) {
         enrichRedEnvelopeInfo(msg);
@@ -259,6 +267,53 @@ const enrichEmojiInfo = (msg) => {
         };
     } catch (e) {
         console.warn("parse animated emoji failed", e);
+    }
+};
+
+const enrichLocationInfo = (msg) => {
+    const xmlSource = msg.message_content_data || msg.data?.content;
+    if (!xmlSource) {
+        return;
+    }
+    try {
+        const dom = parseXml(xmlSource);
+        const location = dom?.querySelector('location');
+        if (!location) {
+            return;
+        }
+        const poiname = location.getAttribute('poiname') || location.getAttribute('label') || '';
+        msg._location = {
+            x: location.getAttribute('x') || '',
+            y: location.getAttribute('y') || '',
+            scale: location.getAttribute('scale') || '',
+            label: location.getAttribute('label') || '',
+            poiname
+        };
+        if (!msg.data.content) {
+            msg.data.content = poiname || msg._location.label || '位置';
+        }
+    } catch (e) {
+        console.warn("parse location message failed", e);
+    }
+};
+
+const enrichMergedMessageInfo = (msg) => {
+    const appmsg = parseAppMsgNode(msg);
+    if (!appmsg) {
+        return;
+    }
+    const record =
+        appmsg.recorditem ||
+        appmsg.recordinfo ||
+        appmsg?.mmreader?.recorditem ||
+        appmsg?.mmreader?.recordinfo;
+    msg._merge = {
+        title: normalizeText(appmsg.title) || '聊天记录',
+        desc: normalizeText(appmsg.des) || '',
+        record
+    };
+    if (!msg.data.content) {
+        msg.data.content = msg._merge.title;
     }
 };
 
