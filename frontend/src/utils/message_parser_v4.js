@@ -270,6 +270,48 @@ const enrichEmojiInfo = (msg) => {
     }
 };
 
+const ensureArray = (value) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    return [value];
+};
+
+const parseRecordInfo = (record) => {
+    if (!record) return null;
+    if (typeof record === 'string') {
+        const parsed = parseXmlToJsonSafe(record);
+        if (parsed?.recordinfo) return parsed.recordinfo;
+        if (parsed?.recordxml?.recordinfo) return parsed.recordxml.recordinfo;
+        return parsed;
+    }
+    if (record.recordxml?.recordinfo) return record.recordxml.recordinfo;
+    if (record.recordinfo) return record.recordinfo;
+    return record;
+};
+
+const normalizeMergeItems = (record) => {
+    const recordInfo = parseRecordInfo(record);
+    if (!recordInfo) return [];
+    const dataitems = recordInfo?.datalist?.dataitem || recordInfo?.dataitem;
+    return ensureArray(dataitems).map((item, index) => {
+        if (!item) return null;
+        const attr = item['@attributes'] || {};
+        const type = String(attr.datatype || attr.type || '');
+        return {
+            id: index,
+            type,
+            title: normalizeText(item.datatitle) || normalizeText(item.title) || '',
+            desc: normalizeText(item.datadesc) || normalizeText(item.datafmt) || '',
+            thumb: normalizeText(item.datathumb) || normalizeText(item.thumburl) || '',
+            datasourceid: attr.datasourceid || '',
+            dataid: attr.dataid || '',
+            fullmd5: normalizeText(item.fullmd5) || '',
+            sourcename: normalizeText(item.sourcename) || '',
+            sourcetime: normalizeText(item.sourcetime) || '',
+        };
+    }).filter(Boolean);
+};
+
 const enrichLocationInfo = (msg) => {
     const xmlSource = msg.message_content_data || msg.data?.content;
     if (!xmlSource) {
@@ -307,10 +349,12 @@ const enrichMergedMessageInfo = (msg) => {
         appmsg.recordinfo ||
         appmsg?.mmreader?.recorditem ||
         appmsg?.mmreader?.recordinfo;
+    const items = normalizeMergeItems(record);
     msg._merge = {
         title: normalizeText(appmsg.title) || '聊天记录',
         desc: normalizeText(appmsg.des) || '',
-        record
+        record,
+        items
     };
     if (!msg.data.content) {
         msg.data.content = msg._merge.title;

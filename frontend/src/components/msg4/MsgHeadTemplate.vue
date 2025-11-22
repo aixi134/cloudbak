@@ -60,6 +60,12 @@ const previewState = reactive({
   visible: false,
   url: "",
 });
+const mergeModalState = reactive({
+  visible: false,
+  title: "",
+  desc: "",
+  items: [],
+});
 const referPreview = ref(null);
 const referTypeText = {
   1: "[文本]",
@@ -72,8 +78,10 @@ const referTypeText = {
   50: "[通话]",
   2000: "[转账]",
   2001: "[红包]",
-  2002: "[收款]",
+  2002: "[拍一拍]",
 };
+
+
 
 
 const REFER_DEFAULT_TEXT = "[引用消息]";
@@ -430,6 +438,116 @@ watch(
   { immediate: true }
 );
 
+const normalizeMergeItems = (record) => {
+  if (!record) return [];
+  const items = record?.datalist?.dataitem || record?.dataitem || [];
+  const arr = Array.isArray(items) ? items : [items];
+  return arr
+    .map((item, index) => {
+      if (!item) return null;
+      const attr = item["@attributes"] || {};
+      const type = String(attr.datatype || attr.type || "");
+      const title =
+        normalizeReferType(item.datatitle) ||
+        normalizeReferType(item.title) ||
+        "";
+      const desc =
+        normalizeReferType(item.datadesc) ||
+        normalizeReferType(item.datafmt) ||
+        "";
+      const thumb =
+        normalizeReferType(item.datathumb) ||
+        normalizeReferType(item.thumburl) ||
+        "";
+      const datasourceid = attr.datasourceid || "";
+      const dataid = attr.dataid || "";
+      const fullmd5 = normalizeReferType(item.fullmd5) || "";
+      const sourcename = normalizeReferType(item.sourcename) || "";
+      const sourcetime = normalizeReferType(item.sourcetime) || "";
+      return {
+        id: index,
+        type,
+        title,
+        desc,
+        thumb,
+        datasourceid,
+        dataid,
+        fullmd5,
+        sourcename,
+        sourcetime,
+      };
+    })
+    .filter(Boolean);
+};
+
+const openMergeDetail = () => {
+  mergeModalState.title = mergeInfo.value.title || "聊天记录";
+  mergeModalState.desc = mergeInfo.value.desc || "";
+  mergeModalState.items = normalizeMergeItems(mergeInfo.value.record | mergeInfo.value.items);
+  mergeModalState.visible = true;
+};
+
+
+
+const closeMergeDetail = () => {
+  mergeModalState.visible = false;
+  mergeModalState.items = [];
+};
+
+const mergeImageSrc = (item) => {
+  if (!item) return undefined;
+  if (item.thumb) return buildRelativeResourceUrl(item.thumb);
+  if (item.dataid) return buildRelativeResourceUrl(item.dataid);
+  if (item.datasourceid) return buildRelativeResourceUrl(item.datasourceid);
+  if (item.fullmd5) return buildRelativeResourceUrl(item.fullmd5);
+  return undefined;
+};
+
+const mergeVideoSrc = (item) => {
+  if (!item) return { src: undefined, poster: undefined };
+  if (item.datasourceid) {
+    return {
+      src: buildRelativeResourceUrl(item.datasourceid, "video"),
+      poster: buildRelativeResourceUrl(item.thumb || item.datasourceid),
+    };
+  }
+  if (item.dataid) {
+    return {
+      src: buildRelativeResourceUrl(item.dataid, "video"),
+      poster: buildRelativeResourceUrl(item.thumb || item.dataid),
+    };
+  }
+  if (item.fullmd5) {
+    return {
+      src: buildRelativeResourceUrl(item.fullmd5, "video"),
+      poster: buildRelativeResourceUrl(item.thumb || item.fullmd5),
+    };
+  }
+  return { src: undefined, poster: undefined };
+};
+
+const mergeItemLabel = (type) => {
+  switch (type) {
+    case "1":
+      return "文本";
+    case "2":
+      return "图片";
+    case "4":
+      return "视频";
+    case "8":
+      return "文件";
+    case "17":
+      return "聊天记录";
+    default:
+      return "消息";
+  }
+};
+
+const formatMergeText = (text) => {
+  if (!text) return "";
+  return text.replace(/\n/g, "<br>");
+};
+
 const isAppMessage = (type) => {
   return APP_MESSAGE_TYPES.has(type);
 };
@@ -716,6 +834,7 @@ const chatInfoStyle = computed(() => ({
       <div
         class="chat-merge"
         v-else-if="props.msg.local_type === MERGED_MESSAGE_TYPE && mergeInfo"
+        @click="openMergeDetail"
       >
         <p class="merge-title">{{ mergeInfo.title || "聊天记录" }}</p>
         <p class="merge-desc" v-if="mergeInfo.desc">{{ mergeInfo.desc }}</p>
@@ -768,6 +887,62 @@ const chatInfoStyle = computed(() => ({
       @click="closePreview"
     >
       <img :src="previewState.url" alt="preview" @click.stop />
+    </div>
+  </Teleport>
+  <Teleport to="body">
+    <div
+      v-if="mergeModalState.visible"
+      class="merge-modal-mask"
+      @click="closeMergeDetail"
+    >
+      <div class="merge-modal" @click.stop>
+        <div class="merge-modal-header">
+          <p class="title">{{ mergeModalState.title }}</p>
+          <span class="close" @click="closeMergeDetail">×</span>
+        </div>
+        <p class="merge-modal-desc" v-if="mergeModalState.desc">
+          {{ mergeModalState.desc }}
+        </p>
+        <div class="merge-modal-body">
+          <div
+            class="merge-item"
+            v-for="item in mergeModalState.items"
+            :key="item.id"
+          >
+            <div class="merge-item-meta">
+              <span class="merge-item-user">{{ item.sourcename || "未知" }}</span>
+              <span class="merge-item-type">{{ mergeItemLabel(item.type) }}</span>
+              <span class="merge-item-time" v-if="item.sourcetime">
+                {{ item.sourcetime }}
+              </span>
+            </div>
+            <p class="merge-item-title" v-if="item.title">
+              {{ item.title }}
+            </p>
+            <div class="merge-item-content">
+              <div v-if="item.type === '1'" v-html="formatMergeText(item.desc)"></div>
+              <div v-else-if="item.type === '2'">
+                <img
+                  v-if="mergeImageSrc(item)"
+                  class="exclude"
+                  :src="mergeImageSrc(item)"
+                  alt="图片"
+                />
+                <p v-else class="merge-placeholder">[图片]</p>
+              </div>
+              <div v-else-if="item.type === '4'">
+                <video v-if="mergeVideoSrc(item).src" controls width="240">
+                  <source :src="mergeVideoSrc(item).src" type="video/mp4" />
+                </video>
+                <p v-else class="merge-placeholder">[视频]</p>
+              </div>
+              <div v-else class="merge-placeholder">
+                {{ mergeItemLabel(item.type) }}：{{ item.desc || "[不支持的内容]" }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </Teleport>
 </template>
@@ -1174,5 +1349,89 @@ const chatInfoStyle = computed(() => ({
     box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
     border-radius: 4px;
   }
+}
+.merge-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 1rem;
+}
+.merge-modal {
+  background: #fff;
+  border-radius: 6px;
+  width: min(600px, 90vw);
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+}
+.merge-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f0f0f0;
+  .title {
+    margin: 0;
+    font-weight: 600;
+    font-size: 1rem;
+  }
+  .close {
+    cursor: pointer;
+    font-size: 1.2rem;
+  }
+}
+.merge-modal-desc {
+  padding: 0 1rem;
+  color: #777;
+  font-size: 0.9rem;
+}
+.merge-modal-body {
+  padding: 0.75rem 1rem 1rem;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.merge-item {
+  border: 1px solid #ededed;
+  border-radius: 0.357rem;
+  padding: 0.5rem 0.75rem;
+}
+.merge-item-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+  .merge-item-user {
+    font-weight: 600;
+  }
+  .merge-item-type {
+    color: #9b9b9b;
+    font-size: 0.82rem;
+  }
+  .merge-item-time {
+    color: #9b9b9b;
+    font-size: 0.85rem;
+  }
+}
+.merge-item-title {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+}
+.merge-item-content {
+  img {
+    max-width: 100%;
+    border-radius: 0.214rem;
+  }
+}
+.merge-placeholder {
+  color: #777;
+  font-size: 0.9rem;
 }
 </style>
