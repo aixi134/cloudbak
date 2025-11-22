@@ -317,13 +317,7 @@ const normalizeSvrId = (svrid) => {
 
 // 获取当前消息所在的数据库编号，兼容不同字段命名
 const resolveDbNo = (message = props.msg) => {
-  return (
-    message?.DbNo ??
-    message?.db_no ??
-    message?.dbNo ??
-    message?.db ??
-    ""
-  );
+  return message?.DbNo ?? message?.db_no ?? message?.dbNo ?? message?.db ?? "";
 };
 
 // 兼容引用与当前消息的图片展示
@@ -350,7 +344,9 @@ const getMessageVideoSource = (message) => {
   if (message.media?.source) {
     return {
       src: buildRelativeResourceUrl(message.media.source, "video"),
-      poster: buildRelativeResourceUrl(message.media.thumb || message.media.source),
+      poster: buildRelativeResourceUrl(
+        message.media.thumb || message.media.source
+      ),
     };
   }
   const md5 = message._video?.msg?.videomsg?.["@attributes"]?.md5;
@@ -380,7 +376,9 @@ const referImageSrc = computed(() =>
 const referImageOriginSrc = computed(() =>
   getImageDisplaySrc(true, referPreview.value)
 );
-const referVideoSource = computed(() => getMessageVideoSource(referPreview.value));
+const referVideoSource = computed(() =>
+  getMessageVideoSource(referPreview.value)
+);
 const referVoiceSrc = computed(() => getVoiceSrc(referPreview.value));
 const locationInfo = computed(() => props.msg._location || {});
 const mergeInfo = computed(() => props.msg._merge || {});
@@ -400,7 +398,8 @@ const referHasRichPreview = computed(() => {
   if (preview.local_type === 3 && referImageSrc.value) return true;
   if (preview.local_type === 43 && referVideoSource.value.src) return true;
   if (preview.local_type === 34 && referVoiceSrc.value) return true;
-  if (preview.local_type === ANIMATED_EMOJI_TYPE && referImageSrc.value) return true;
+  if (preview.local_type === ANIMATED_EMOJI_TYPE && referImageSrc.value)
+    return true;
   return false;
 });
 
@@ -419,7 +418,6 @@ const loadReferPreview = async () => {
     const dbNo = resolveDbNo();
     const data = await msgBySvrId(props.roomId, svrId, dbNo);
     if (data.windows_v4_properties) {
-
       parseMsg(data.windows_v4_properties, resolveCurrentWxId());
       chatMapBySvrId[svrId] = data.windows_v4_properties;
       referPreview.value = data.windows_v4_properties;
@@ -483,24 +481,14 @@ const normalizeMergeItems = (record) => {
 const openMergeDetail = () => {
   mergeModalState.title = mergeInfo.value.title || "聊天记录";
   mergeModalState.desc = mergeInfo.value.desc || "";
-  mergeModalState.items = normalizeMergeItems(mergeInfo.value.record | mergeInfo.value.items);
+  const itemsFromMerge =
+    mergeInfo.value.items && mergeInfo.value.items.length
+      ? mergeInfo.value.items
+      : [];
+  mergeModalState.items = itemsFromMerge.length
+    ? itemsFromMerge
+    : normalizeMergeItems(mergeInfo.value.record);
   mergeModalState.visible = true;
-};
-
-
-
-const closeMergeDetail = () => {
-  mergeModalState.visible = false;
-  mergeModalState.items = [];
-};
-
-const mergeImageSrc = (item) => {
-  if (!item) return undefined;
-  if (item.thumb) return buildRelativeResourceUrl(item.thumb);
-  if (item.dataid) return buildRelativeResourceUrl(item.dataid);
-  if (item.datasourceid) return buildRelativeResourceUrl(item.datasourceid);
-  if (item.fullmd5) return buildRelativeResourceUrl(item.fullmd5);
-  return undefined;
 };
 
 const mergeVideoSrc = (item) => {
@@ -586,7 +574,8 @@ const normalizeReferType = (type) => {
     if ("text" in type) return String(type.text);
     if ("#text" in type) return String(type["#text"]);
     if ("value" in type) return String(type.value);
-    if (Array.isArray(type) && type.length === 1) return normalizeReferType(type[0]);
+    if (Array.isArray(type) && type.length === 1)
+      return normalizeReferType(type[0]);
   }
   return String(type);
 };
@@ -612,9 +601,10 @@ const referContent = (refer) => {
   const typeKey = normalizeReferType(refer.type);
   console.log("[refer] typeKey", typeKey, "refer", refer);
   const typeLabel = referTypeText[typeKey] || REFER_DEFAULT_TEXT;
-  return refer.displayname ? `${refer.displayname} ${typeLabel}`.trim() : typeLabel;
+  return refer.displayname
+    ? `${refer.displayname} ${typeLabel}`.trim()
+    : typeLabel;
 };
-
 
 const miniProgramLink = () => {
   if (!props.msg._appmsg) {
@@ -707,7 +697,10 @@ const chatInfoStyle = computed(() => ({
           {{ props.msg._emoji.desc }}
         </p>
       </div>
-      <div v-else-if="props.msg.local_type === LOCATION_TYPE" class="chat-location">
+      <div
+        v-else-if="props.msg.local_type === LOCATION_TYPE"
+        class="chat-location"
+      >
         <div class="location-icon">📍</div>
         <div class="location-body">
           <p class="location-title">
@@ -716,9 +709,14 @@ const chatInfoStyle = computed(() => ({
           <p class="location-desc" v-if="locationInfo.label">
             {{ locationInfo.label }}
           </p>
-          <p class="location-desc coords" v-if="locationInfo.x && locationInfo.y">
+          <p
+            class="location-desc coords"
+            v-if="locationInfo.x && locationInfo.y"
+          >
             {{ locationInfo.x }}, {{ locationInfo.y }}
-            <span v-if="locationInfo.scale">· 缩放 {{ locationInfo.scale }}</span>
+            <span v-if="locationInfo.scale"
+              >· 缩放 {{ locationInfo.scale }}</span
+            >
           </p>
         </div>
       </div>
@@ -751,7 +749,10 @@ const chatInfoStyle = computed(() => ({
           v-if="props.msg._quote?.refer"
           @click="gotoReference"
         >
-          <p class="refer-text" v-if="!referHasRichPreview && !referTypeIsMedia">
+          <p
+            class="refer-text"
+            v-if="!referHasRichPreview && !referTypeIsMedia"
+          >
             {{ referContent(props.msg._quote.refer) }}
           </p>
 
@@ -781,13 +782,18 @@ const chatInfoStyle = computed(() => ({
             >
               <AudioPlayer
                 :src="referVoiceSrc"
-                :text="referPreview.message_content_data || referPreview.data?.content"
+                :text="
+                  referPreview.message_content_data ||
+                  referPreview.data?.content
+                "
                 :right="isSelf"
               />
             </div>
             <div
               class="refer-img"
-              v-else-if="referPreview.local_type === ANIMATED_EMOJI_TYPE && referImageSrc"
+              v-else-if="
+                referPreview.local_type === ANIMATED_EMOJI_TYPE && referImageSrc
+              "
             >
               <img class="exclude" :src="referImageSrc" alt="引用表情" />
             </div>
@@ -910,8 +916,12 @@ const chatInfoStyle = computed(() => ({
             :key="item.id"
           >
             <div class="merge-item-meta">
-              <span class="merge-item-user">{{ item.sourcename || "未知" }}</span>
-              <span class="merge-item-type">{{ mergeItemLabel(item.type) }}</span>
+              <span class="merge-item-user">{{
+                item.sourcename || "未知"
+              }}</span>
+              <span class="merge-item-type">{{
+                mergeItemLabel(item.type)
+              }}</span>
               <span class="merge-item-time" v-if="item.sourcetime">
                 {{ item.sourcetime }}
               </span>
@@ -920,7 +930,10 @@ const chatInfoStyle = computed(() => ({
               {{ item.title }}
             </p>
             <div class="merge-item-content">
-              <div v-if="item.type === '1'" v-html="formatMergeText(item.desc)"></div>
+              <div
+                v-if="item.type === '1'"
+                v-html="formatMergeText(item.desc)"
+              ></div>
               <div v-else-if="item.type === '2'">
                 <img
                   v-if="mergeImageSrc(item)"
@@ -937,7 +950,9 @@ const chatInfoStyle = computed(() => ({
                 <p v-else class="merge-placeholder">[视频]</p>
               </div>
               <div v-else class="merge-placeholder">
-                {{ mergeItemLabel(item.type) }}：{{ item.desc || "[不支持的内容]" }}
+                {{ mergeItemLabel(item.type) }}：{{
+                  item.desc || "[不支持的内容]"
+                }}
               </div>
             </div>
           </div>
@@ -1139,79 +1154,79 @@ const chatInfoStyle = computed(() => ({
   }
 }
 
-  .chat-emoji {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: flex-start;
-    img {
-      max-width: 8rem;
-      max-height: 8rem;
-      width: auto;
-      height: auto;
-      object-fit: contain;
-    }
-    .emoji-desc {
-      margin-top: 0.357rem;
-      font-size: 0.857rem;
-      color: #777;
-    }
+.chat-emoji {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  img {
+    max-width: 8rem;
+    max-height: 8rem;
+    width: auto;
+    height: auto;
+    object-fit: contain;
   }
-  .chat-location {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-    background-color: #ffffff;
-    border: 1px solid #ededed;
-    border-radius: 0.357rem;
-    padding: 0.571rem 0.714rem;
-    max-width: 18rem;
-    .location-icon {
-      color: #e64340;
-      font-size: 1.2rem;
-      margin-top: 0.1rem;
-    }
-    .location-body {
-      .location-title {
-        font-weight: 600;
-        margin: 0;
-      }
-      .location-desc {
-        margin: 0.1rem 0 0;
-        color: #6b6b6b;
-        font-size: 0.9rem;
-      }
-      .coords {
-        font-size: 0.786rem;
-        color: #9b9b9b;
-      }
-    }
+  .emoji-desc {
+    margin-top: 0.357rem;
+    font-size: 0.857rem;
+    color: #777;
   }
-
-  .chat-merge {
-    background-color: #ffffff;
-    border: 1px solid #ededed;
-    border-radius: 0.357rem;
-    padding: 0.714rem;
-    max-width: 18rem;
-    .merge-title {
+}
+.chat-location {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background-color: #ffffff;
+  border: 1px solid #ededed;
+  border-radius: 0.357rem;
+  padding: 0.571rem 0.714rem;
+  max-width: 18rem;
+  .location-icon {
+    color: #e64340;
+    font-size: 1.2rem;
+    margin-top: 0.1rem;
+  }
+  .location-body {
+    .location-title {
       font-weight: 600;
       margin: 0;
     }
-    .merge-desc {
-      margin: 0.3rem 0 0;
-      color: #777;
+    .location-desc {
+      margin: 0.1rem 0 0;
+      color: #6b6b6b;
       font-size: 0.9rem;
-      max-height: 3.6rem;
-      overflow: hidden;
     }
-    .merge-hint {
-      margin: 0.4rem 0 0;
-      color: #a0a0a0;
+    .coords {
       font-size: 0.786rem;
+      color: #9b9b9b;
     }
   }
+}
 
-  .chat-redpacket {
+.chat-merge {
+  background-color: #ffffff;
+  border: 1px solid #ededed;
+  border-radius: 0.357rem;
+  padding: 0.714rem;
+  max-width: 18rem;
+  .merge-title {
+    font-weight: 600;
+    margin: 0;
+  }
+  .merge-desc {
+    margin: 0.3rem 0 0;
+    color: #777;
+    font-size: 0.9rem;
+    max-height: 3.6rem;
+    overflow: hidden;
+  }
+  .merge-hint {
+    margin: 0.4rem 0 0;
+    color: #a0a0a0;
+    font-size: 0.786rem;
+  }
+}
+
+.chat-redpacket {
   width: 16.429rem;
   border-radius: 0.571rem;
   padding: 0.714rem;
